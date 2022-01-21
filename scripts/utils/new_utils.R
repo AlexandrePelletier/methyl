@@ -198,7 +198,7 @@ GetVarPCs<-function(pca,rngPCs="all"){
 
 
 # Basic function to convert human to mouse gene names
-convertHumanGeneList <- function(x){
+convertHumanGeneList <- function(x,return_dt=T){
   
   require("biomaRt")
   human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
@@ -206,6 +206,8 @@ convertHumanGeneList <- function(x){
   
   genesV2 = getLDS(attributes = c("hgnc_symbol"), filters = "hgnc_symbol", values = x , mart = human, attributesL = c("mgi_symbol"), martL = mouse, uniqueRows=T)
   
+  if(return_dt)return(data.table(genesV2))
+
   mousex <- unique(genesV2[, 2])
   
   # Print the first 6 genes found to the screen
@@ -213,13 +215,14 @@ convertHumanGeneList <- function(x){
   return(mousex)
 }
 
-convertMouseGeneList <- function(x){
+convertMouseGeneList <- function(x,return_dt=T){
   
   require("biomaRt")
   human = useMart("ensembl", dataset = "hsapiens_gene_ensembl")
   mouse = useMart("ensembl", dataset = "mmusculus_gene_ensembl")
   
   genesV2 = getLDS(attributes = c("mgi_symbol"), filters = "mgi_symbol", values = x , mart = mouse, attributesL = c("hgnc_symbol"), martL = human, uniqueRows=T)
+  if(return_dt)return(data.table(genesV2))
   humanx <- unique(genesV2[, 2])
   
   # Print the first 6 genes found to the screen
@@ -231,8 +234,7 @@ convertMouseGeneList <- function(x){
 #Over repre / GSEA
 
 
-
-over_repr_test_simple<-function(set1,set2,size_universe){
+OR<-function(set1,set2,size_universe){
   if(any(duplicated(set1))){
     set1<-unique(set1)
   }
@@ -249,28 +251,52 @@ over_repr_test_simple<-function(set1,set2,size_universe){
 
 }
 
-over_repr_test_multi<-function(genes_of_interest,terms_list,size_universe,min.term.size=10,max.term.size=500){
-  res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,length))
+
+
+OR2<-function(query,terms_list,size_universe,min.term.size=0,max.term.size=Inf,verbose=F){
+  if(is.list(query)){
+    return(Reduce(rbind,lapply(names(query),
+                             function(q)OR2(query = query[[q]],
+                                              terms_list = terms_list,
+                                              size_universe = size_universe)[,query:=q])))
+  }else{
+    res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,length))
   res_or<-res_or[term.size<=max.term.size]
   n_terms<-nrow(res_or)
-  message(length(terms_list)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
+  if(verbose)message(length(terms_list)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
   res_or<-res_or[term.size>=min.term.size]
-  message(n_terms-nrow(res_or), " terms were filtered due to term.size below the limit of ",min.term.size," genes")
+  if(verbose)message(n_terms-nrow(res_or), " terms were filtered due to term.size below the limit of ",min.term.size," genes")
   
-  res_or[,n.genes.altered:=length(genes_of_interest)]
-  res_or[,n.enriched:=sum(genes_of_interest%in%terms_list[[term]]),by="term"]
-  res_or[,genes.enriched:=paste(genes_of_interest[genes_of_interest%in%terms_list[[term]]],collapse="|"),by="term"]
-  res_or[,pct.enriched:=n.enriched/term.size]
-  res_or[,pval:=phyper(q=n.enriched-1, 
-                     m=n.genes.altered, 
-                     n=size_universe-n.genes.altered, 
+  res_or[,n.query:=length(query)]
+  res_or[,n.overlap:=sum(query%in%terms_list[[term]]),by="term"]
+  res_or[,genes.overlap:=paste(query[query%in%terms_list[[term]]],collapse="|"),by="term"]
+  res_or[,pct.overlap:=n.overlap/term.size]
+  res_or[,pval:=phyper(q=n.overlap-1, 
+                     m=n.query, 
+                     n=size_universe-n.query, 
                      k=term.size, 
                      lower.tail=FALSE),
        by="term"]
   res_or[,padj:=p.adjust(pval,method = 'BH')]
-  message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
+  if(verbose)message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
   return(res_or)
+      }
+  
 }
+
+
+#trans in hg38
+hg19to38<-function(x){
+  in_file<-"outputs/temp_hg19.bed"
+  out_file<-"outputs/temp_hg38.bed"
+  
+  fwrite(x,in_file,col.names = F,sep="\t")
+  
+  system(paste("CrossMap.py bed ref/hg19ToHg38.over.chain.gz",in_file,out_file))
+  trans<-fread("temp_hg38.bed",select=c(1,2,3,4),col.names = c("chr","start","end","id"))
+  file.remove(c(in_file,out_file))
+  return(trans)
+  }
 
 
 
