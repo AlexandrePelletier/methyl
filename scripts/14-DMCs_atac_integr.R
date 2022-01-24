@@ -89,9 +89,71 @@ MotifPlot(
 
 
 #2) OCR by lineage
-#map hematomap
 
-#OCR
+#renv::install("harmony")
+library(harmony)
+DefaultAssay(atacs)<-"ATAC"
+atacs <- RunHarmony(
+  object = atacs,
+  group.by.vars = 'dataset',
+  reduction = 'lsi',
+  assay.use = 'ATAC',
+  project.dim = FALSE
+)
+# re-compute the UMAP using corrected LSI embeddings
+
+atacs <- RunUMAP(atacs, dims = 2:30, reduction = 'harmony',reduction.name = "humap")
+DimPlot(atacs, group.by = 'dataset',reduction = "humap", pt.size = 0.1)
+
+atacs <- FindNeighbors(object = atacs, reduction = 'harmony', dims = 2:30)
+atacs <- FindClusters(object = atacs, verbose = FALSE, algorithm = 3 )
+DimPlot(object = atacs, reduction = "humap",label = TRUE) + NoLegend()
+
+#map hematomap
+hmap<-readRDS('outputs/05-make_hematomap/hematomap_ctrls_sans_stress.rds')
+DefaultAssay(hmap)<-"integrated"
+
+# quantify gene activity
+
+gene.activities <- GeneActivity(atacs, features = VariableFeatures(hmap))
+
+# add gene activities as a new assay
+atacs[["ACTIVITY"]] <- CreateAssayObject(counts = gene.activities)
+
+# normalize gene activities
+DefaultAssay(atacs) <- "ACTIVITY"
+atacs <- SCTransform(atacs,residual.features = rownames(atacs),assay = "ACTIVITY" )
+# Identify anchors
+transfer.anchors <- FindTransferAnchors(reference = hmap, query = atacs, features = VariableFeatures(object = hmap),
+    reference.assay = "integrated", query.assay = "ACTIVITY", reduction = "cca",normalization.method = "SCT")
+
+celltype.predictions <- TransferData(anchorset = transfer.anchors, refdata = hmap$lineage,
+    weight.reduction = atacs[["lsi"]], dims = 2:30)
+
+atacs <- AddMetaData(atacs, metadata = celltype.predictions)
+head(atacs[[]])
+DimPlot(atacs, group.by = "predicted.id", label = TRUE,reduction = "humap")
+saveRDS(atacs,fp(out,"cbps_atacs.rds"))
+
+VlnPlot(atacs,"prediction.score.max",group.by="predicted.id")
+
+
+#OCR by lineage
+#need macs2
+
+renv::use_python()
+#reticulate::install_miniconda()
+
+reticulate::use_miniconda()
+
+reticulate::py_install(packages ="MACS2")
+
+peaks <- CallPeaks(
+  object = atacs,
+  group.by = "predicted.id",
+  macs2.path = ""
+)
+
 
 #II) methylOCR regul EGR1 network ?
 

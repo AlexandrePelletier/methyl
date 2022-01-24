@@ -36,7 +36,7 @@ mtd[,(categorical_vars):=lapply(.SD,as.factor),.SDcols=categorical_vars]
 
 numerical_vars<-c("weight.g","weight_at_term.lbs","gest.age.wk","length.cm","mat.age","head_circumf.cm.","ponderal_index","seq.depth","library_complexity","group_complexity","group_complexity_fac","groupbatch_complexity","groupbatch_complexity_fac")
 
-
+fwrite(mtd,"datasets/cd34/metadata_formated.csv")
 meth<-fread(meth_file,
             select = c("id","chr","start",mtd$sample,"msp1c","confidenceScore"),
             col.names = c("cpg_id","chr","pos",mtd$sample,"msp1c","confidence_score"))
@@ -241,6 +241,25 @@ ggplot(res)+
   geom_point(aes(x=logFC,y=-log10(P.Value),col=adj.P.Val<0.1&abs(logFC)>25),size=0.1)+
   scale_color_manual(values = c("grey","red"))+theme_minimal()
 ggsave(fp(out,"volcano_plot.png"))
+
+
+#logFC == %difference ?
+methf[,avg.lga:=rowMeans(.SD),.SDcols=mtd_f[group=="LGA"]$sample]
+methf[,avg.ctrl:=rowMeans(.SD),.SDcols=mtd_f[group=="CTRL"]$sample]
+
+res_m<-merge(res,methf[,.(cpg_id,avg.lga,avg.ctrl)],by="cpg_id")
+res_m[,meth_diff:=avg.lga-avg.ctrl]
+res_m[,meth_fc:=avg.lga/avg.ctrl]
+res_m[,meth_lfc:=log2(meth_fc)]
+
+plot(res_m$logFC,res_m$meth_diff)
+plot(res_m[adj.P.Val<0.1]$logFC,res_m[adj.P.Val<0.1]$meth_diff)
+
+plot(res_m$logFC,res_m$meth_fc)
+plot(res_m$logFC,res_m$meth_lfc)
+
+
+cor(res_m$logFC,res_m$meth_diff)^2 #r2=84%
 
 
 #DMR

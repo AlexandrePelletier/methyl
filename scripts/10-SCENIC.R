@@ -13,9 +13,10 @@ library(Seurat)
 #run 10B-get_regul_activity
 
 
-#add integrated and SCENIC assa cbps_map_on_hmap
+#added integrated and SCENIC assa cbps_map_on_hmap
 cbps<-readRDS(fp(out,"cbps_with_regulons_activity.rds"))
-VlnPlot(cbps_scenic, c("STAT3","GATA1","SPI1"),group.by="lineage",pt.size = 0) 
+saveRDS(cbps@assays$TF_AUC,fp(out,"TF_AUC_assay.rds"))
+VlnPlot(cbps, c("STAT3","GATA1","SPI1"),group.by="lineage",pt.size = 0) 
 
 DefaultAssay(cbps)<-"TF_AUC"
 

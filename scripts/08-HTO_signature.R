@@ -8,10 +8,149 @@ dir.create(out)
 
 cbps<-readRDS("outputs/06-integr_singlecell_cbps/cbps_filtered.rds")
 
-#cellcycle activation 
+#cellcycle activation ####
 mtd<-data.table(cbps@meta.data,keep.rownames = "bc")
+mtd$Phase<-factor(mtd$Phase,levels = c("G1","S","G2M"))
+mtd$lineage_hmap<-factor(mtd$lineage_hmap,levels = c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","Lymphoid"))
 
-ggplot(mtd[differentiated==F&group=="ctrl"])+geom_bar(aes(x=hto,fill=Phase),position = "fill")+
+#G2M score
+#for dupli
+mtdf<-mtd[lineage_hmap%in%c("HSC",'MPP/LMPP')]
+ggplot(mtdf[sample%in%c("ctrlM555","ctrlM518","ctrlM537")])+geom_boxplot(aes(x=sample,y=G2M.Score,fill=hto),outlier.shape = NA)+
+  coord_cartesian(ylim = c(-0.2,0.12))
+
+#for all
+p<-ggplot(mtdf)+geom_boxplot(aes(x=hto,y=G2M.Score,fill=hto,group=sample_hto),outlier.shape = NA)+
+  coord_cartesian(ylim = c(-0.2,0.12))
+p+labs( x="Sample", y = "G2/M Score",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+#pct G2M
+#calc pct global
+mtd[,n.sample:=.N,.(sample_hto)]
+mtd[,pct.phase:=.N/n.sample,by=.(sample_hto,Phase)]
+mts<-unique(mtd,by=c("sample_hto","Phase"))
+
+#calc pct by lineage
+mtd[,n.sample.lin:=.N,.(sample_hto,lineage_hmap)]
+mtd[,pct.phase.lin:=.N/n.sample.lin,by=.(sample_hto,lineage_hmap,Phase)]
+mtsl<-unique(mtd,by=c("sample_hto","lineage_hmap","Phase"))
+
+#plot 
+#duplicates barplot
+#global
+mtsd<-mts[sample%in%c("ctrlM555","ctrlM518","ctrlM537")]
+mtsd[,mean.pct:=mean(pct.phase),by=.(Phase,hto)]
+ggplot(mtsd)+geom_col(aes(x=Phase,y=mean.pct,fill=hto),position = "dodge")
+
+#global by sample for only G2M
+p1<-ggplot(mtsd[Phase=="G2M"])+geom_col(aes(x=sample,y=pct.phase*100,fill=hto),position = "dodge")
+p1<-p1+labs( x="Sample", y = "HSPC in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+pa<-ggplot(mtsd[Phase=="G2M"])+geom_col(aes(y=pct.phase*100,x=hto,fill=hto),position = "dodge")
+pa<-pa+labs( x="Sample", y = "HSPC in G2/M Phase (%)",x="HTO labelling",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+#only in HSC/MPP cells for only G2M
+mtdf<-mtd[lineage_hmap%in%c("HSC",'MPP/LMPP')]
+mtdf[,n.sample:=.N,.(sample_hto)]
+mtdf[,pct.phase:=.N/n.sample,by=.(sample_hto,Phase)]
+mtsf<-unique(mtdf,by=c("sample_hto","Phase"))
+mtsfd<-mtsf[sample%in%c("ctrlM555","ctrlM518","ctrlM537")]
+p2<-ggplot(mtsfd[Phase=="G2M"])+geom_col(aes(x=sample,y=pct.phase*100,fill=hto),position = "dodge")
+p2<-p2+labs( x="Sample", y = "HSC/MPP cells in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+pb<-ggplot(mtsfd[Phase=="G2M"])+geom_col(aes(x=hto,y=pct.phase*100,fill=hto),position = "dodge")
+pb<-pb+labs( x="HTO labelling", y = "HSC/MPP cells in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic()  +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+
+p1+p2
+ggsave(fp(out,"cellcycle_activation.pdf"))
+
+pa+pb
+ggsave(fp(out,"cellcycle_activation2.pdf"))
+
+ggplot(mtd[sample%in%c("ctrlM555","ctrlM518","ctrlM537")])+
+  geom_bar(aes(x=hto,fill=Phase),position = "fill")+
+  facet_wrap('sample')
+
+px<-ggplot(mtsfd[Phase!="G1"])+
+  geom_col(aes(x=hto,y=pct.phase*100,fill=Phase),position = "stack")+
+  facet_wrap('sample')
+px<-px+labs( x="HTO labelling", y = "HSC/MPP in Cell Cycle Phase (%)",fill="Cell Cycle Phase")+
+   theme_minimal() 
+
+ggsave(fp(out,"cellcycle_activation3.pdf"))
+
+mtdf2<-mtd[lineage_hmap%in%c("HSC",'MPP/LMPP')&sample%in%c("ctrlM555","ctrlM518","ctrlM537")]
+mtdf2[,n.cells:=.N,.(hto)]
+mtdf2[,pct.phase:=.N/n.cells,by=.(Phase,hto)]
+mtsf2<-unique(mtdf2,by=c("Phase",'hto'))
+
+py<-ggplot(mtsf2[Phase!="G1"])+
+  geom_col(aes(x=hto,y=pct.phase*100,fill=Phase),position = "stack")
+py+labs( x="HTO labelling", y = "HSC/MPP in Cell Cycle Phase (%)",fill="Cell Cycle Phase")+
+   theme_minimal() 
+
+ggsave(fp(out,"cellcycle_activation4.pdf"))
+
+
+#all samples boxplot
+#global by sample for only G2M
+p<-ggplot(mts[Phase=="G2M"])+geom_boxplot(aes(x=hto,y=pct.phase*100,fill=hto))
+p+labs( x="Sample", y = "Cells in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+
+#only in HSC/MPP cells for only G2M
+mtdf<-mtd[lineage_hmap%in%c("HSC",'MPP/LMPP')]
+mtdf[,n.sample:=.N,.(sample_hto)]
+mtdf[,pct.phase:=.N/n.sample,by=.(sample_hto,Phase)]
+mtsf<-unique(mtdf,by=c("sample_hto","Phase"))
+p<-ggplot(mtsf[Phase=="G2M"])+geom_boxplot(aes(x=hto,y=pct.phase*100,fill=hto))
+p+labs( x="Sample", y = "HSC/MPP cells in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+#by group
+p<-ggplot(mtsf[Phase=="G2M"])+geom_boxplot(aes(x=hto,y=pct.phase*100,fill=group))
+p+labs( x="HTO labelling", y = "HSC/MPP cells in G2/M Phase (%)",fill="Group")+
+   theme_classic()
+
+#by lineage
+mtsld<-rbind(mtsld,data.table(Phase="G2M",differentiated=F,sample="ctrlM537",hto=F,lineage_hmap='HSC',pct.phase.lin=0),fill=T)
+p<-ggplot(mtsld[Phase=="G2M"&differentiated==F&lineage_hmap!="LT-HSC"],
+          aes(x=sample,y=pct.phase.lin*100,fill=hto))+
+  geom_col(position = "dodge")+
+  facet_wrap("lineage_hmap")+scale_fill_discrete(drop=FALSE)
+
+p+labs( x="Sample", y = "cells in G2/M Phase (%)",fill="HTO labelling")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+p<- ggplot(mtsld[Phase=="G2M"&differentiated==F&lineage_hmap!="LT-HSC"],
+           aes(x=lineage_hmap, y=mean.pct, fill=hto)) + 
+  geom_bar(stat="identity", color="black", 
+           position=position_dodge()) +
+  geom_errorbar(aes(ymin=mean.pct-se.pct, ymax=mean.pct+se.pct), width=.2,
+                 position=position_dodge(.9)) 
+
+p
+
+
+#all samples boxplot
+ggplot(mts)+geom_boxplot(aes(x=Phase,y=pct.phase,fill=hto))
+
+ggplot(mtsl[differentiated==F])+geom_boxplot(aes(x=Phase,y=pct.phase,fill=hto))+
   facet_wrap("lineage_hmap")
 
 
@@ -169,6 +308,21 @@ res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.6]$gene,fromType
 saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp.rds"))
 res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
 fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp.csv"))
+
+#go bp up
+res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1)
+saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp_up.rds"))
+res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
+fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp_up.csv"))
+#go bp dn
+res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1)
+saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp_dn.rds"))
+res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
+fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp_dn.csv"))
 
 #b) signature by lineage####
 out1<-fp(out,"by_lineage")
@@ -554,3 +708,5 @@ fwrite(res_dt,fp(out,"res_all_cbps_de_analysis.csv"),sep=";")
 #now that we have validated hsc response to stimulation, we can evaluate the differential response of lga HSC compared to control
 
 #see 09-
+
+
