@@ -6,8 +6,8 @@ library(Seurat)
 #renv::install("Signac")
 library(Signac)
 
-#I)DMCs overlap in OCR ?
-#1) overall OCR
+#I) BULK OCRs
+#1)DMCs overlap in OCR ?
 atacs<-readRDS("../atac/outputs/cbps_merged/cbps_atac1-4_merged_qc.rds")
 ocrs<-data.table(peaks=rownames(atacs))
 ocrs[,chr:=str_extract(peaks,"chr[0-9XY]+"),]
@@ -93,7 +93,7 @@ MotifPlot(
 )
 
 # peaks with EGR1/KLF2/KLF4/.. motif close to which genes? genes of the EGRN ?  genes Downregulé ? Genes of the EGRN downregules ?
-#EGR1
+#for EGR1
 dmcs_ocrs<-fread(fp(out,"DMCs_in_bulk_OCRs.csv.gz"))
 enriched.motifs<-fread(fp(out,"enriched_motifs_in_CpGs_overlaping_OCRs_with_DMCs_vs_without.csv"))
 
@@ -112,108 +112,71 @@ df_genes_dmcs_egr1<-ClosestFeature(atacs,regions = peaks_dmcs_egr1)
 genes_dmcs_egr1<-unique(df_genes_dmcs_egr1$gene_name)
 length(genes_dmcs_egr1) #2222
 
-#genes of the EGRN ?  
+#for all
+genes_close_tf_meth<-Reduce(rbind,lapply(c("EGR1","KLF2","KLF4"),function(x){
+  tf_motif_dmcs<-motifs_dmcs[,enriched.motifs[motif.name==x]$motif,drop=F]
+  peaks_dmcs_tf<-rownames(tf_motif_dmcs)[as.vector(tf_motif_dmcs==1)]
+  dt_genes_dmcs_tf<-data.table(ClosestFeature(atacs,regions = peaks_dmcs_tf))
+  dt_genes_dmcs_tf[,n.gene:=length(unique(gene_id))]
+  dt_genes_dmcs_tf[,dmc_region:=T]
+  return(dt_genes_dmcs_tf[,tf.motif:=x])
+  
+  }))
+fwrite(genes_close_tf_meth,fp(out,"res_closest_genes_tfmotif_dmcs_ocr.csv"))
+
+#genes of the EGRN / EGR1/KLF2/KLF4 targets, xxx DEGs ? xxx Downregules ?
+
 tftargets<-fread("outputs/13-GRN_integr/tf_target_interactions.csv")
 EGRn<-fread("outputs/13-GRN_integr/egr1_network_tf_target_interactions.csv")
-egrn_genes<-unique(EGRn$target)
-length(egrn_genes)#208
-intersect(genes_dmcs_egr1,egrn_genes) 
-# [1] "ID3"      "TINAGL1"  "RLF"      "ATP1B1"   "IER5"     "ATF3"     "PTGER4"  
-#  [8] "TBCC"     "IFRD1"    "KLF6"     "ZEB1"     "DDIT4"    "TRIM8"    "CD151"   
-# [15] "CDKN1C"   "AHNAK"    "ETS1"     "C12orf57" "UBC"      "TSC22D1"  "INTS6"   
-# [22] "NFKBIA"   "ZFP36L1"  "MOAP1"    "EIF5"     "KLF13"    "HEXIM1"   "TOB1"    
-# [29] "SOCS3"    "TGIF1"    "PRNP"  
-#32/208
-OR(genes_dmcs_egr1,egrn_genes,size_universe = length(unique(tftargets$target))) #p=1
-
-#genes downregules ?
 res_degs<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")
-dn_genes<-res_degs[lineage=="HSC"&padj<0.05&log2FoldChange<(-0.5)]$gene
-length(dn_genes)#285
-intersect(genes_dmcs_egr1,dn_genes) 
-# [1] "IFFO2"     "LUZP1"     "C1orf109"  "PLK3"      "BEND5"     "EFNA3"    
-#  [7] "SEMA4A"    "ATP1B1"    "IER5"      "SLC30A1"   "TAF5L"     "FAM43A"   
-# [13] "RPP38"     "BAMBI"     "UBE2D1"    "PPRC1"     "TAF5"      "DUSP5"    
-# [19] "BAG3"      "PHLDA2"    "C11orf96"  "SLC3A2"    "STIP1"     "H2AFX"    
-# [25] "C2CD2L"    "RAB3IP"    "IKBIP"     "CRY1"      "EFNB2"     "NFKBIA"   
-# [31] "BRMS1L"    "GCH1"      "JDP2"      "CYP1A1"    "TNFRSF12A" "CFAP20"   
-# [37] "ATP6V0D1"  "SPATA2L"   "DERL2"     "PSMC3IP"   "PLEKHH3"   "HEXIM1"   
-# [43] "SOCS3"     "TOP1"       
-#43/285 DEGs
-OR(genes_dmcs_egr1,dn_genes,size_universe = length(unique(res_degs$gene))) #p=0.81
 
-#Genes of the EGRN downregules ?
-genes_dn_egr1<-intersect(egrn_genes,dn_genes)
-length(genes_dn_egr1) #32
-intersect(genes_dmcs_egr1,genes_dn_egr1) 
-#"ATP1B1" "IER5"   "NFKBIA" "HEXIM1" "SOCS3" 5/32
+trs_list<-list(EGRN_target=unique(EGRn$target),
+               EGR1_target=EGRn[tf=="EGR1"]$target,
+               KLF4_target=EGRn[tf=="KLF4"]$target,
+               KLF2_target=EGRn[tf=="KLF2"]$target)
 
-#32/208
-OR(genes_dmcs_egr1,genes_dn_egr1,size_universe = length(unique(intersect(tftargets$target,res_degs$gene)))) #p=1
+trs_de_list<-lapply(trs_list,function(x)intersect(x,res_degs[lineage=="HSC"&padj<0.05&abs(log2FoldChange)>0.5]$gene))
+names(trs_de_list)<-paste0(names(trs_list),"_degs")
 
+trs_dn_list<-lapply(trs_list,function(x)intersect(x,res_degs[lineage=="HSC"&padj<0.05&log2FoldChange<(-0.5)]$gene))
+names(trs_dn_list)<-paste0(names(trs_list),"_down")
 
-#KLF2
-enriched.motifs[order(pvalue)]$motif.name
-query_motif_dmcs<-motifs_dmcs[,enriched.motifs[motif.name=="KLF2"]$motif,drop=F]
-peaks_dmcs_query<-rownames(query_motif_dmcs)[as.vector(query_motif_dmcs==1)]
-length(peaks_dmcs_query) #2445
-df_genes_dmcs_query<-ClosestFeature(atacs,regions = peaks_dmcs_query)
-genes_dmcs_klf2<-unique(df_genes_dmcs_query$gene_name)
-length(genes_dmcs_klf2) #2271
-#genes of the EGRN ?  
-intersect(genes_dmcs_klf2,egrn_genes)
-#  [1] "ID3"      "TINAGL1"  "RLF"      "ATP1B1"   "ATF3"     "PTGER4"   "TBCC"    
-#  [8] "IFRD1"    "KLF6"     "ZEB1"     "DDIT4"    "TRIM8"    "CD151"    "CDKN1C"  
-# [15] "AHNAK"    "ETS1"     "C12orf57" "UBC"      "TSC22D1"  "INTS6"    "NFKBIA"  
-# [22] "ZFP36L1"  "MOAP1"    "EIF5"     "KLF13"    "HEXIM1"   "TOB1"     "SOCS3"   
-# [29] "TGIF1"    "PRNP"    
-OR(genes_dmcs_klf2,egrn_genes,size_universe = length(unique(tftargets$target))) #p=1
+degs_list<-list(degs=res_degs[lineage=="HSC"&padj<0.05&abs(log2FoldChange)>0.5]$gene,
+                down=res_degs[lineage=="HSC"&padj<0.05&log2FoldChange<(-0.5)]$gene,
+                up=res_degs[lineage=="HSC"&padj<0.05&log2FoldChange>0.5]$gene)
+all_trs_list<-c(trs_list,trs_de_list,trs_dn_list,degs_list)
 
-#genes DEGs ?
-intersect(genes_dmcs_klf2,dn_genes) 
-#  [1] "IFFO2"     "LUZP1"     "PLK3"      "BEND5"     "GSTM3"     "TUFT1"    
-#  [7] "EFNA3"     "ATP1B1"    "SLC30A1"   "TAF5L"     "FAM43A"    "RPP38"    
-# [13] "BAMBI"     "UBE2D1"    "TAF5"      "DUSP5"     "BAG3"      "PHLDA2"   
-# [19] "SLC3A2"    "STIP1"     "CDK2AP2"   "C2CD2L"    "RAB3IP"    "IKBIP"    
-# [25] "CRY1"      "EFNB2"     "NFKBIA"    "BRMS1L"    "GCH1"      "JDP2"     
-# [31] "TRIP11"    "CYP1A1"    "KCTD5"     "TNFRSF12A" "CFAP20"    "ATP6V0D1" 
-# [37] "SPATA2L"   "DERL2"     "PSMC3IP"   "PLEKHH3"   "HEXIM1"    "METTL2A"  
-# [43] "SOCS3"  
-OR(genes_dmcs_klf2,dn_genes,size_universe = length(unique(res_degs$gene))) #p=0.89
+genes_list<-split(genes_close_tf_meth$gene_name,genes_close_tf_meth$tf.motif)
+genes_list<-lapply(genes_list, unique)
 
-#KLF4
-enriched.motifs[order(pvalue)]$motif.name
-query_motif_dmcs<-motifs_dmcs[,enriched.motifs[motif.name=="KLF4"]$motif,drop=F]
-peaks_dmcs_query<-rownames(query_motif_dmcs)[as.vector(query_motif_dmcs==1)]
-length(peaks_dmcs_query) #2713
-df_genes_dmcs_query<-ClosestFeature(atacs,regions = peaks_dmcs_query)
-genes_dmcs_klf4<-unique(df_genes_dmcs_query$gene_name)
-length(genes_dmcs_klf4) #2485
-#genes of the EGRN ?  
-intersect(genes_dmcs_klf4,egrn_genes) 
-#  [1] "ID3"      "TINAGL1"  "RLF"      "ATP1B1"   "ATF3"     "PTGER4"   "TBCC"    
-#  [8] "PHACTR2"  "IFRD1"    "KLF6"     "ZEB1"     "DDIT4"    "TRIM8"    "CD151"   
-# [15] "CDKN1C"   "AHNAK"    "ETS1"     "C12orf57" "UBC"      "TSC22D1"  "INTS6"   
-# [22] "NFKBIA"   "ZFP36L1"  "MOAP1"    "EIF5"     "KLF13"    "HEXIM1"   "TOB1"    
-# [29] "H3F3B"    "SOCS3"    "TGIF1"    "SERTAD1"  "PRNP" 
-OR(genes_dmcs_klf4,egrn_genes,size_universe = length(unique(tftargets$target))) #p=1
+res_or_trs<-OR3(all_trs_list,genes_list,background = unique(res_degs$gene)) 
+res_or_trs[padj<0.05]
+#          query term term.size n.query n.overlap pct.query.overlap precision pct.term.overlap background_size pct.term.background
+# 1: KLF2_target EGR1      1433      98        18         0.1836735 0.1836735       0.01256106           12877           0.1112837
+# 2: KLF2_target KLF2      1479      98        18         0.1836735 0.1836735       0.01217039           12877           0.1148559
+# 3: KLF2_target KLF4      1598      98        19         0.1938776 0.1938776       0.01188986           12877           0.1240972
+# 4:        down EGR1      1433     285        44         0.1543860 0.1543860       0.03070482           12877           0.1112837
+#          pval       padj
+# 1: 0.02198625 0.03104840
+# 2: 0.02915675 0.03104840
+# 3: 0.03104840 0.03104840
+# 4: 0.01523962 0.04571885
+#                                                                                                                                                                                                                                                                                        genes.overlap
+# 1:                                                                                                                                                                                      AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 2:                                                                                                                                                                                      AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 3:                                                                                                                                                                              AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SERTAD1|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 4: C1orf109|TAF5L|ATP1B1|EFNA3|BEND5|IER5|LUZP1|IFFO2|SLC30A1|PLK3|SEMA4A|FAM43A|BAMBI|RPP38|SLC3A2|STIP1|C2CD2L|PHLDA2|C11orf96|CRY1|UBE2D1|NFKBIA|BRMS1L|EFNB2|RAB3IP|GCH1|DUSP5|JDP2|TAF5|PPRC1|BAG3|IKBIP|TNFRSF12A|PLEKHH3|CFAP20|DERL2|PSMC3IP|CYP1A1|SPATA2L|ATP6V0D1|SOCS3|HEXIM1|TOP1|H2AFX
+#          query
+# 1: KLF2_target
+# 2: KLF2_target
+# 3: KLF2_target
+# 4:        down
 
-#genes DEGs ?
-intersect(genes_dmcs_klf4,dn_genes) 
-#  [1] "IFFO2"     "LUZP1"     "C1orf109"  "PLK3"      "BEND5"     "GSTM3"    
-#  [7] "TUFT1"     "EFNA3"     "SEMA4A"    "ATP1B1"    "SLC30A1"   "TAF5L"    
-# [13] "FAM43A"    "RPP38"     "BAMBI"     "UBE2D1"    "PPRC1"     "TAF5"     
-# [19] "DUSP5"     "BAG3"      "PHLDA2"    "C11orf96"  "SLC3A2"    "STIP1"    
-# [25] "CDK2AP2"   "C2CD2L"    "RAB3IP"    "IKBIP"     "CRY1"      "EFNB2"    
-# [31] "NFKBIA"    "BRMS1L"    "GCH1"      "JDP2"      "CYP1A1"    "KCTD5"    
-# [37] "TNFRSF12A" "CFAP20"    "ATP6V0D1"  "SPATA2L"   "DERL2"     "PLEKHH3"  
-# [43] "HEXIM1"    "SOCS3" 
-OR(genes_dmcs_klf4,dn_genes,size_universe = length(unique(res_degs$gene))) #p=0.96
+fwrite(res_or_trs,fp(out,"res_trs_network_enrichment_for_closest_genes_of_dmcs_containing_tf_bulk_ocrs.csv"))
 
 
-
-#2) OCR by lineage
-
+#II) OCR by lineage
+#0) compute lin OCRs
 #renv::install("harmony")
 library(harmony)
 DefaultAssay(atacs)<-"ATAC"
@@ -262,8 +225,7 @@ saveRDS(atacs,fp(out,"cbps_atacs.rds"))
 VlnPlot(atacs,"prediction.score.max",group.by="predicted.id")
 
 
-#OCR by lineage
-#run 14A - OCRby lineaea
+#1) DMCs enrichment in linOCRs
 atacs<-readRDS(fp(out,"cbps_atacs.rds"))
 #need macs2
 
@@ -342,10 +304,66 @@ res_or_cpgs#33% des cpgs sont dans des OCRs HSC, alors que 72% des DMCs sont dan
 ggplot(res_or_cpgs[term!="18"])+geom_col(aes(x=term,y=n.overlap,fill=precision),position = "dodge")
 
 
-peaks
+#2) lin spe methylOCR regul EGR1 network ?
+#2a) For HSC peaks
+#feature matrix #[to do]
 
-FeatureMatrix(peaks)
+#assay HSC_peaks
 
-#II) methylOCR regul EGR1 network ?
+#TF motif enrichment in dmcs peaks #[to update]
+peaks_with_dmcs<-unique(res_cpgs_ocrs[P.Value<0.001&abs(logFC)>25]$peaks)
+peaks_without<-unique(res_cpgs_ocrs[!peaks%in%peaks_with_dmcs]$peaks)
+enriched.motifs <- FindMotifs(
+  object = atacs,
+  features = peaks_with_dmcs ,
+  background=peaks_without)
 
+
+enriched.motifs<-data.table(enriched.motifs)
+fwrite(enriched.motifs,fp(out,"enriched_motifs_in_CpGs_overlaping_OCRs_with_DMCs_vs_without.csv"))
+
+
+
+#genes of the EGRN / EGR1/KLF2/KLF4 targets, xxx DEGs ? xxx Downregules ?
+
+genes_close_tf_meth<-Reduce(rbind,lapply(c("EGR1","KLF2","KLF4"),function(x){
+  tf_motif_dmcs<-motifs_dmcs[,enriched.motifs[motif.name==x]$motif,drop=F]
+  peaks_dmcs_tf<-rownames(tf_motif_dmcs)[as.vector(tf_motif_dmcs==1)]
+  dt_genes_dmcs_tf<-data.table(ClosestFeature(atacs,regions = peaks_dmcs_tf))
+  dt_genes_dmcs_tf[,n.gene:=length(unique(gene_id))]
+  dt_genes_dmcs_tf[,dmc_region:=T]
+  return(dt_genes_dmcs_tf[,tf.motif:=x])
+  
+  }))
+fwrite(genes_close_tf_meth,fp(out,"res_closest_genes_tfmotif_dmcs_ocr.csv"))
+
+genes_list<-split(genes_close_tf_meth$gene_name,genes_close_tf_meth$tf.motif)
+genes_list<-lapply(genes_list, unique)
+
+res_or_trs<-OR3(all_trs_list,genes_list,background = unique(res_degs$gene)) 
+res_or_trs[padj<0.05]
+#          query term term.size n.query n.overlap pct.query.overlap precision pct.term.overlap background_size pct.term.background
+# 1: KLF2_target EGR1      1433      98        18         0.1836735 0.1836735       0.01256106           12877           0.1112837
+# 2: KLF2_target KLF2      1479      98        18         0.1836735 0.1836735       0.01217039           12877           0.1148559
+# 3: KLF2_target KLF4      1598      98        19         0.1938776 0.1938776       0.01188986           12877           0.1240972
+# 4:        down EGR1      1433     285        44         0.1543860 0.1543860       0.03070482           12877           0.1112837
+#          pval       padj
+# 1: 0.02198625 0.03104840
+# 2: 0.02915675 0.03104840
+# 3: 0.03104840 0.03104840
+# 4: 0.01523962 0.04571885
+#                                                                                                                                                                                                                                                                                        genes.overlap
+# 1:                                                                                                                                                                                      AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 2:                                                                                                                                                                                      AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 3:                                                                                                                                                                              AHNAK|ATF3|CD151|DDIT4|ETS1|HEXIM1|ID3|INTS6|KLF13|PTGER4|SERTAD1|SOCS3|TINAGL1|TOB1|TRIM8|TSC22D1|UBC|ZFP36L1|IFRD1
+# 4: C1orf109|TAF5L|ATP1B1|EFNA3|BEND5|IER5|LUZP1|IFFO2|SLC30A1|PLK3|SEMA4A|FAM43A|BAMBI|RPP38|SLC3A2|STIP1|C2CD2L|PHLDA2|C11orf96|CRY1|UBE2D1|NFKBIA|BRMS1L|EFNB2|RAB3IP|GCH1|DUSP5|JDP2|TAF5|PPRC1|BAG3|IKBIP|TNFRSF12A|PLEKHH3|CFAP20|DERL2|PSMC3IP|CYP1A1|SPATA2L|ATP6V0D1|SOCS3|HEXIM1|TOP1|H2AFX
+#          query
+# 1: KLF2_target
+# 2: KLF2_target
+# 3: KLF2_target
+# 4:        down
+
+fwrite(res_or_trs,fp(out,"res_trs_network_enrichment_for_closest_genes_of_dmcs_containing_tf_bulk_ocrs.csv"))
+
+#enrichment for OCRs/ DMCs OCRs / EGR1 OCRSs / DMCs EGR1 OCRs for HSC opening ?
 

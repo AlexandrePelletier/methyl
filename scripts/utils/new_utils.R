@@ -301,14 +301,16 @@ OR2<-function(querys,terms_list,size_universe,min.term.size=0,max.term.size=Inf,
 
 OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,overlap_column=TRUE,verbose=FALSE){
   if(is.list(querys)){
-    return(Reduce(rbind,lapply(names(querys),
-                             function(q)OR2(querys = querys[[q]],
+    dt<-Reduce(rbind,lapply(names(querys),
+                             function(q)OR3(querys = querys[[q]],
                                               terms_list = terms_list,
                                               background = background,
                                             min.term.size = min.term.size,
                                             max.term.size = max.term.size,
                                             overlap_column = overlap_column,
-                                            verbose = verbose )[,query:=q])))
+                                            verbose = verbose )[,query:=q]))
+    
+    return(dt[,.SD,.SDcols=c(ncol(dt),1:ncol(dt))])
   }else{
   res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,function(x)sum(x%in%background)))
   res_or<-res_or[term.size<=max.term.size]
@@ -319,9 +321,7 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
   
   res_or[,n.query:=sum(querys%in%background)]
   res_or[,n.overlap:=sum(querys%in%terms_list[[term]]),by="term"]
-  if(overlap_column==TRUE){
-    res_or[,genes.overlap:=paste(querys[querys%in%terms_list[[term]]],collapse="|"),by="term"]
-  }
+  
   res_or[,pct.query.overlap:=n.overlap/n.query]
   res_or[,precision:=pct.query.overlap]
 
@@ -339,6 +339,9 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
                      lower.tail=FALSE),
        by="term"]
   res_or[,padj:=p.adjust(pval,method = 'BH')]
+  if(overlap_column==TRUE){
+    res_or[,genes.overlap:=paste(querys[querys%in%terms_list[[term]]],collapse="|"),by="term"]
+  }
   if(verbose)message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
   return(res_or)
       }
