@@ -253,24 +253,39 @@ OR<-function(set1,set2,size_universe){
 
 
 
-OR2<-function(query,terms_list,size_universe,min.term.size=0,max.term.size=Inf,verbose=F){
-  if(is.list(query)){
-    return(Reduce(rbind,lapply(names(query),
-                             function(q)OR2(query = query[[q]],
+OR2<-function(querys,terms_list,size_universe,min.term.size=0,max.term.size=Inf,overlap_column=TRUE,verbose=FALSE){
+  if(is.list(querys)){
+    return(Reduce(rbind,lapply(names(querys),
+                             function(q)OR2(querys = querys[[q]],
                                               terms_list = terms_list,
-                                              size_universe = size_universe)[,query:=q])))
+                                              size_universe = size_universe,
+                                            min.term.size = min.term.size,
+                                            max.term.size = max.term.size,
+                                            overlap_column = overlap_column,
+                                            verbose = verbose )[,query:=q])))
   }else{
-    res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,length))
+  res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,length))
   res_or<-res_or[term.size<=max.term.size]
   n_terms<-nrow(res_or)
   if(verbose)message(length(terms_list)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
   res_or<-res_or[term.size>=min.term.size]
   if(verbose)message(n_terms-nrow(res_or), " terms were filtered due to term.size below the limit of ",min.term.size," genes")
   
-  res_or[,n.query:=length(query)]
-  res_or[,n.overlap:=sum(query%in%terms_list[[term]]),by="term"]
-  res_or[,genes.overlap:=paste(query[query%in%terms_list[[term]]],collapse="|"),by="term"]
-  res_or[,pct.overlap:=n.overlap/term.size]
+  res_or[,n.query:=length(querys)]
+  res_or[,n.overlap:=sum(querys%in%terms_list[[term]]),by="term"]
+  if(overlap_column==TRUE){
+    res_or[,genes.overlap:=paste(querys[querys%in%terms_list[[term]]],collapse="|"),by="term"]
+  }
+  res_or[,pct.query.overlap:=n.overlap/n.query]
+  res_or[,precision:=pct.query.overlap]
+
+  res_or[,pct.term.overlap:=n.overlap/term.size]
+  
+  res_or[,background_size:=size_universe]
+
+  res_or[,pct.background:=term.size/size_universe] #TO IMPROVE (Here size universe can be the intersection between 2 "univers" while n.query is the n.query is the query universe. 
+  
+
   res_or[,pval:=phyper(q=n.overlap-1, 
                      m=n.query, 
                      n=size_universe-n.query, 
@@ -284,6 +299,51 @@ OR2<-function(query,terms_list,size_universe,min.term.size=0,max.term.size=Inf,v
   
 }
 
+OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,overlap_column=TRUE,verbose=FALSE){
+  if(is.list(querys)){
+    return(Reduce(rbind,lapply(names(querys),
+                             function(q)OR2(querys = querys[[q]],
+                                              terms_list = terms_list,
+                                              background = background,
+                                            min.term.size = min.term.size,
+                                            max.term.size = max.term.size,
+                                            overlap_column = overlap_column,
+                                            verbose = verbose )[,query:=q])))
+  }else{
+  res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,function(x)sum(x%in%background)))
+  res_or<-res_or[term.size<=max.term.size]
+  n_terms<-nrow(res_or)
+  if(verbose)message(length(terms_list)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
+  res_or<-res_or[term.size>=min.term.size]
+  if(verbose)message(n_terms-nrow(res_or), " terms were filtered due to term.size below the limit of ",min.term.size," genes")
+  
+  res_or[,n.query:=sum(querys%in%background)]
+  res_or[,n.overlap:=sum(querys%in%terms_list[[term]]),by="term"]
+  if(overlap_column==TRUE){
+    res_or[,genes.overlap:=paste(querys[querys%in%terms_list[[term]]],collapse="|"),by="term"]
+  }
+  res_or[,pct.query.overlap:=n.overlap/n.query]
+  res_or[,precision:=pct.query.overlap]
+
+  res_or[,pct.term.overlap:=n.overlap/term.size]
+  
+  res_or[,background_size:=length(background)]
+
+  res_or[,pct.term.background:=term.size/background_size] 
+  
+
+  res_or[,pval:=phyper(q=n.overlap-1, 
+                     m=n.query, 
+                     n=background_size-n.query, 
+                     k=term.size, 
+                     lower.tail=FALSE),
+       by="term"]
+  res_or[,padj:=p.adjust(pval,method = 'BH')]
+  if(verbose)message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
+  return(res_or)
+      }
+  
+}
 
 #trans in hg38
 hg19to38<-function(x){

@@ -27,6 +27,7 @@ regulons[,tf:=str_remove(tf,"e$")]
 regulons[(extended)] #59955 tf> target interaction
 regulons[(!extended)] #12017 tf> target interaction with high confidence
 fwrite(regulons,fp(out,"tf_target_interactions.csv"))
+regulons<-fread(fp(out,"tf_target_interactions.csv"))
 
 #start build netork only with tf> interact with high conf
 regf<-regulons[(!extended)]
@@ -69,8 +70,12 @@ saveRDS(net,fp(out,"network_tf_target_hi_conf.rds"))
 #only with tf of interest
 egr1_modul<-c("KLF2","FOSB","JUN","EGR1","KLF4","ARID5A")
 reg_egr1<-regf[tf%in%c(egr1_modul)] #add only targets of the tfs altered
+
+fwrite(reg_egr1,fp(out,"egr1_network_tf_target_interactions.csv"))
+
 net_genes<-union(reg_egr1$tf,reg_egr1$target)
-reg_egr1<-unique(rbind(reg_egr1,regf[target%in%egr1_modul&tf%in%net_genes])) #add also regulators of this tfs in this newtwork
+reg_egr1r<-unique(rbind(reg_egr1,regf[target%in%egr1_modul&tf%in%net_genes])) #add also regulators of this tfs in this newtwork
+fwrite(reg_egr1r,fp(out,"egr1_network_plus_tf_regulators_tf_target_interactions.csv"))
 
 #reg_egr1<-regf[tf%in%c(egr1_modul)|target%in%egr1_modul] #add upstream regulators of egr1_modul
 
