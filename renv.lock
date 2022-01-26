@@ -13,8 +13,7 @@
   },
   "Python": {
     "Version": "3.7.3",
-    "Type": "virtualenv",
-    "Name": null
+    "Type": "virtualenv"
   },
   "Packages": {
     "AUCell": {

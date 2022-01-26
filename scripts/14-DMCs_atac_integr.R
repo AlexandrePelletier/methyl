@@ -6,9 +6,10 @@ library(Seurat)
 #renv::install("Signac")
 library(Signac)
 
-#I) BULK OCRs
+#I) BULK OCRs####
 #1)DMCs overlap in OCR ?
 atacs<-readRDS("../atac/outputs/cbps_merged/cbps_atac1-4_merged_qc.rds")
+nrow(atacs) #126925 
 ocrs<-data.table(peaks=rownames(atacs))
 ocrs[,chr:=str_extract(peaks,"chr[0-9XY]+"),]
 ocrs[,start:=strsplit(peaks,"-")[[1]][2],by="peaks"]
@@ -28,7 +29,7 @@ cpgs_in_ocrs<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_
           ocrs[,.(chr,start,end,peaks)],
           select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peaks","start","end"))
 
-length(unique(cpgs_in_ocrs$cpg_id))#300/750k
+length(unique(cpgs_in_ocrs$cpg_id))#300k/750k
 fwrite(cpgs_in_ocrs,fp(out,"cpgs_in_bulk_OCRs.csv.gz"))
 cpgs_in_ocrs<-fread(fp(out,"cpgs_in_bulk_OCRs.csv.gz"))
 
@@ -36,6 +37,7 @@ res_cpgs_ocrs<-merge(res_meth[,.(cpg_id,logFC,AveExpr,P.Value,adj.P.Val)],cpgs_i
 
 res_cpgs_ocrs[P.Value<0.001&abs(logFC)>25] #3910
 fwrite(res_cpgs_ocrs,fp(out,"res_meth_in_bulk_OCRs.csv.gz"))
+res_cpgs_ocrs<-fread(fp(out,"res_meth_in_bulk_OCRs.csv.gz"))
 
 fwrite(res_cpgs_ocrs[P.Value<0.001&abs(logFC)>25],fp(out,"DMCs_in_bulk_OCRs.csv.gz"))
 
@@ -44,14 +46,14 @@ res_cpgs_ocrs[,peak_size:=end-start]
 ggplot(res_cpgs_ocrs)+geom_density(aes(peak_size))
 
 #TF motif enrichment in this peaks
-renv::install("bioc::JASPAR2020")
-renv::install("bioc::TFBSTools")
+#renv::install("bioc::JASPAR2020")
+#renv::install("bioc::TFBSTools")
 
 library(JASPAR2020)
 library(TFBSTools)
 
-renv::install("bioc::BSgenome.Hsapiens.UCSC.hg38")
-renv::install("bioc::motifmatchr")
+#renv::install("bioc::BSgenome.Hsapiens.UCSC.hg38")
+#renv::install("bioc::motifmatchr")
 
 library(BSgenome.Hsapiens.UCSC.hg38)
 
@@ -80,7 +82,8 @@ enriched.motifs <- FindMotifs(
 
 enriched.motifs<-data.table(enriched.motifs)
 fwrite(enriched.motifs,fp(out,"enriched_motifs_in_CpGs_overlaping_OCRs_with_DMCs_vs_without.csv"))
-
+enriched.motifs<-fread(fp(out,"enriched_motifs_in_CpGs_overlaping_OCRs_with_DMCs_vs_without.csv"))
+head(enriched.motifs,25)
 enriched.motifs[pvalue<0.000001]$motif.name
 enriched.motifs[,motif.name:=factor(motif.name,levels=enriched.motifs[order(pvalue)]$motif.name)]
 
@@ -173,9 +176,10 @@ res_or_trs[padj<0.05]
 # 4:        down
 
 fwrite(res_or_trs,fp(out,"res_trs_network_enrichment_for_closest_genes_of_dmcs_containing_tf_bulk_ocrs.csv"))
+res_or_trs<-fread(fp(out,"res_trs_network_enrichment_for_closest_genes_of_dmcs_containing_tf_bulk_ocrs.csv"))
 
 
-#II) OCR by lineage
+#II) OCR by lineage####
 #0) compute lin OCRs
 #renv::install("harmony")
 library(harmony)
@@ -245,11 +249,15 @@ peaks_dt<-data.table(as.data.frame(peaks))
 peaks_dt[,peaks:=paste(seqnames,start,end,sep="-")]
 peaks_dt[,chr:=seqnames]
 fwrite(peaks_dt,fp(out,"cbps_atacs_peaks_by_lineage.csv.gz"))
+peaks_dt<-fread(fp(out,"cbps_atacs_peaks_by_lineage.csv.gz"))
+
 peaks_dt2<-Reduce(rbind,lapply(unique(atacs$predicted.id), function(x){
   ocrs<-peaks_dt[str_detect(peak_called_in,x)]
   return(ocrs[,lineage:=x][,-'peak_called_in'])
   }))
 fwrite(peaks_dt2,fp(out,"cbps_atacs_peaks_by_lineage2.csv.gz"))
+peaks_dt2<-fread(fp(out,"cbps_atacs_peaks_by_lineage2.csv.gz"))
+
 #find lin spe OCR overlapping DMCs
 
 cpgs_in_ocrs_lin<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
@@ -271,6 +279,8 @@ res_cpgs_ocrs_lin2<-Reduce(rbind,lapply(unique(atacs$predicted.id), function(x){
   }))
 
 fwrite(res_cpgs_ocrs_lin2,fp(out,"res_cpgs_in_lin_OCRs.csv.gz"))
+res_cpgs_ocrs_lin2<-fread(fp(out,"res_cpgs_in_lin_OCRs.csv.gz"))
+
 res_cpgs_ocrs_lin2[,DMC:=P.Value<0.001&abs(logFC)>25]
 ggplot(res_cpgs_ocrs_lin2)+geom_bar(aes(x=lineage,fill=lineage))
 ggplot(res_cpgs_ocrs_lin2[DMC==T])+geom_bar(aes(x=lineage,fill=lineage))
@@ -306,14 +316,35 @@ ggplot(res_or_cpgs[term!="18"])+geom_col(aes(x=term,y=n.overlap,fill=precision),
 
 #2) lin spe methylOCR regul EGR1 network ?
 #2a) For HSC peaks
-#feature matrix #[to do]
+atacs_hsc<-subset(atacs,predicted.id=="HSC")
+#HSC feature matrix
+peaks<-readRDS(fp(out,"cbps_atacs_peaks_by_lineage.rds"))
+peaks_hsc<-subset(peaks,str_detect(peak_called_in,"HSC"))
+hsc_peaks_mat<-FeatureMatrix(Fragments(atacs_hsc),
+                             features =peaks_hsc,process_n = 2000,
+                             cells=colnames(atacs_hsc))
 
-#assay HSC_peaks
+saveRDS(hsc_peaks_mat,fp(out,"hsc_peaks_counts.rds"))
+#Create Assay
+atacs_hsc[["HSC_peaks"]]<-CreateChromatinAssay(hsc_peaks_mat)
 
-#TF motif enrichment in dmcs peaks #[to update]
-peaks_with_dmcs<-unique(res_cpgs_ocrs[P.Value<0.001&abs(logFC)>25]$peaks)
-peaks_without<-unique(res_cpgs_ocrs[!peaks%in%peaks_with_dmcs]$peaks)
-enriched.motifs <- FindMotifs(
+#Add motif
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(species = "Homo sapiens", all_versions = FALSE)
+)
+
+#TF motif enrichment in dmcs peaks
+peaks_with_dmcs<-unique(res_cpgs_ocrs_lin2[lineage=="HSC"][P.Value<0.001&abs(logFC)>25]$peaks)
+peaks_without<-unique(res_cpgs_ocrs_lin2[!peaks%in%peaks_with_dmcs]$peaks)
+
+atacs <- AddMotifs(
+  object = atacs,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  pfm = pfm
+)
+
+enriched.motifs_hsc <- FindMotifs(
   object = atacs,
   features = peaks_with_dmcs ,
   background=peaks_without)
@@ -364,6 +395,7 @@ res_or_trs[padj<0.05]
 # 4:        down
 
 fwrite(res_or_trs,fp(out,"res_trs_network_enrichment_for_closest_genes_of_dmcs_containing_tf_bulk_ocrs.csv"))
+
 
 #enrichment for OCRs/ DMCs OCRs / EGR1 OCRSs / DMCs EGR1 OCRs for HSC opening ?
 
