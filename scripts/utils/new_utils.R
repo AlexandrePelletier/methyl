@@ -310,17 +310,20 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
                                             overlap_column = overlap_column,
                                             verbose = verbose )[,query:=q]))
     
-    return(dt[,.SD,.SDcols=c(ncol(dt),1:ncol(dt))])
+    return(dt[,query.:=query][,.SD,.SDcols=c(ncol(dt),1:(ncol(dt)-1))])
   }else{
-  res_or<-data.table(term=names(terms_list),term.size=sapply(terms_list,function(x)sum(x%in%background)))
+  queryf<-intersect(querys,background)
+  terms_listf<-lapply(terms_list,function(x)intersect(x,background))
+  res_or<-data.table(term=names(terms_listf),term.size=sapply(terms_listf,length))
   res_or<-res_or[term.size<=max.term.size]
   n_terms<-nrow(res_or)
-  if(verbose)message(length(terms_list)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
+  if(verbose)message(length(terms_listf)-n_terms, " terms were filtered due to term.size above the limit of ",max.term.size," genes")
   res_or<-res_or[term.size>=min.term.size]
+  n_terms<-nrow(res_or)
   if(verbose)message(n_terms-nrow(res_or), " terms were filtered due to term.size below the limit of ",min.term.size," genes")
   
-  res_or[,n.query:=sum(querys%in%background)]
-  res_or[,n.overlap:=sum(querys%in%terms_list[[term]]),by="term"]
+  res_or[,n.query:=length(queryf)]
+  res_or[,n.overlap:=sum(queryf%in%terms_listf[[term]]),by="term"]
   
   res_or[,pct.query.overlap:=n.overlap/n.query]
   res_or[,precision:=pct.query.overlap]
@@ -333,14 +336,15 @@ OR3<-function(querys,terms_list,background,min.term.size=0,max.term.size=Inf,ove
   
 
   res_or[,pval:=phyper(q=n.overlap-1, 
-                     m=n.query, 
-                     n=background_size-n.query, 
-                     k=term.size, 
+                     m=term.size, 
+                     n=background_size-term.size, 
+                     k=n.query, 
                      lower.tail=FALSE),
        by="term"]
   res_or[,padj:=p.adjust(pval,method = 'BH')]
+  res_or[,fold.enrichment:=pct.query.overlap/pct.term.background]
   if(overlap_column==TRUE){
-    res_or[,genes.overlap:=paste(querys[querys%in%terms_list[[term]]],collapse="|"),by="term"]
+    res_or[,genes.overlap:=paste(queryf[queryf%in%terms_listf[[term]]],collapse="|"),by="term"]
   }
   if(verbose)message(nrow(res_or[padj<0.05])," terms enriched in your genes of interest with padj<0.05")
   return(res_or)
@@ -356,7 +360,7 @@ hg19to38<-function(x){
   fwrite(x,in_file,col.names = F,sep="\t")
   
   system(paste("CrossMap.py bed ref/hg19ToHg38.over.chain.gz",in_file,out_file))
-  trans<-fread("temp_hg38.bed",select=c(1,2,3,4),col.names = c("chr","start","end","id"))
+  trans<-fread(out_file,select=c(1,2,3,4),col.names = c("chr","start","end","id"))
   file.remove(c(in_file,out_file))
   return(trans)
   }
