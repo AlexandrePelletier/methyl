@@ -8,6 +8,8 @@ atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atacs.rds")
 atacs[["lin_peaks"]]<-readRDS("outputs/14-DMCs_atac_integr/cbps_lin_spe_peaks_assay.rds")
 DefaultAssay(atacs)<-"lin_peaks"
 Idents(atacs)<-"predicted.id"
+atacs$group<-ifelse(str_detect(atacs$dataset,"1|3"),"ctrl","lga")
+
 peaks_hsc_lga<-FindMarkers(atacs,
                            subset.ident = "HSC",
                           group.by = "group",

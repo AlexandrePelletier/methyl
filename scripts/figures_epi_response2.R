@@ -110,6 +110,41 @@ ggplot(res_or_degs_dmcs_tf)+geom_col(aes(y=log2(fold.enrichment),x=candidat_peak
   theme(axis.text.x = element_text(size = 8))
 ggsave(fp(out,"Ae-barplot_dmcs_tf_peaks_enrichment_in_degs_peaks.pdf"))
 
+#diff accessibility lga vs ctrl HSC
+inp<-"outputs/15-chromatin_change_LGA_vs_Ctrl/"
+#volcano
+
+#tf
+hsc_lga_tf_all<-fread(fp(inp,"motif_enrichment_in_peaks_up_and_down_lga_vs_ctrl_hsc.csv.gz"))
+
+hsc_lga_tf_all[,top20:=rank(pvalue)<=20,by="accessibility"]
+hsc_lga_tf_all_20<-hsc_lga_tf_all[top20==T]
+hsc_lga_tf_all_20[,motif.name:=factor(motif.name,levels =hsc_lga_tf_all_20[order(pvalue)]$motif.name,ordered = T )]
+ggplot(hsc_lga_tf_all_20)+
+  geom_point(aes(x=motif.name,size=fold.enrichment,y=-log10(pvalue),col=percent.observed))+
+  facet_wrap("accessibility",scales = "free_x",ncol = 2)+
+  scale_color_gradient2(low = "grey",mid = "red",high = "darkred",limits=c(0,100),midpoint = 50)+
+  scale_y_continuous(limits=c(0,55),expand = c(0,0))+
+  scale_x_discrete(guide = guide_axis(angle = 60))+
+  theme(axis.text=element_text(size=8))
+ggsave(fp(out,"Ag-dotplot_TF_motif_enrichment_in_up_or_down_peaks_LGA_vs_Ctrl_HSC.pdf"))
+
+#DMCs / DEGs enrichment
+res_or_da_peaks_dmcs_degs<-fread(fp(inp,"res_da_peaks_enrichment_in_dmcs_degs_hsc_peaks.csv"))
+
+res_or_da_peaks_dmcs_degs[,padj_b:=ifelse(padj<0.001,"***",ifelse(padj<0.01,"**",ifelse(padj<0.05,'*','ns')))]
+res_or_da_peaks_dmcs_degs[,padj_b:=factor(padj_b,levels=c("ns","*","**","***"))]
+res_or_da_peaks_dmcs_degs[,candidat_peaks:=paste0(term,"\n(n=",term.size,")")]
+res_or_da_peaks_dmcs_degs[,da_peaks:=paste0(query,"\n(n=",n.query,")")]
+res_or_da_peaks_dmcs_degs[,candidat_peaks:=factor(candidat_peaks,levels =res_or_da_peaks_dmcs_degs[query=="down_peaks"][order(fold.enrichment)]$candidat_peaks )]
+
+ggplot(res_or_da_peaks_dmcs_degs)+geom_col(aes(y=log2(fold.enrichment),x=candidat_peaks,fill=padj_b),position = "dodge")+
+  facet_wrap("da_peaks")+
+  scale_fill_manual(values=c("grey","orange","red","darkred"))+
+  scale_x_discrete(guide =guide_axis(angle = 66))+
+  theme(axis.text.x = element_text(size = 8))
+ggsave(fp(out,"Ah-barplot_dmcs_degs_peaks_enrichment_in_hsc_da_peaks.pdf"))
+
 #SUPP
 #distrib predic lineage
 hmap<-readRDS("outputs/05-make_hematomap/hematomap_ctrls_sans_stress.rds")
@@ -118,5 +153,6 @@ ggplot(atacs@meta.data)+geom_bar(aes(x=predicted.id))
 
 #can remove badly predict lineage ?
 ggplot(atacs@meta.data)+geom_bar(aes(x=predicted.id))
+
 
 

@@ -4,6 +4,8 @@ out<-"outputs/15-chromatin_change_LGA_vs_Ctrl"
 dir.create(out)
 atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atacs.rds")
 atacs[["lin_peaks"]]<-readRDS("outputs/14-DMCs_atac_integr/cbps_lin_spe_peaks_assay.rds")
+atacs@assays$lin_peaks@motifs<-readRDS("outputs/14-DMCs_atac_integr/atacs_cbps_lin_peaks_motif_object.rds")
+
 DefaultAssay(atacs)<-"lin_peaks"
 
 #1) TF motif enrichment/ cells####
@@ -75,7 +77,6 @@ ggplot(peaks_hsc_lga_xy,aes(x=avg_log2FC,y=-log10(p_val_adj),col=p_val_adj<0.001
   theme(legend.position = "bottom")
 
 #Motif enrichment
-atacs@assays$lin_peaks@motifs<-readRDS("outputs/14-DMCs_atac_integr/atacs_cbps_lin_peaks_motif_object.rds")
 
 atacs<-RegionStats(atacs,assay='lin_peaks',genome = BSgenome.Hsapiens.UCSC.hg38)
 
@@ -99,8 +100,62 @@ MotifPlot(
   assay = 'lin_peaks')
 
 #DMCs/DEGs enrichemnt
+#annot peaks
+annotations<-readRDS("../atac/ref/gene_annotations_hg38_GRanges.rds")
+Annotation(atacs) <- annotations
+
+peaks_dt<-fread(fp(out,"cbps_atacs_peaks_by_lineage2.csv.gz"))
+
+peaks_hsc_genes<-data.table(ClosestFeature(atacs,regions =peaks_dt[lineage=="HSC"]$peaks ))
+fwrite(peaks_hsc_genes,fp(out,"peaks_hsc_genes_anno.csv.gz"))
+
+#merge with res_degs
+res_degs<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")
+peaks_hsc_genes[,gene:=gene_name]
+peaks_expr<-merge(peaks_hsc_genes,res_degs[lineage=="HSC"],by = "gene")
+peaks_expr#63959 peaks asso to express genes
+length(unique(peaks_expr$gene)) #10157 genes
+
+#merge with res_cpgs
+peaks_cpgs<-fread("outputs/14-DMCs_atac_integr/cpgs_in_lin_OCRs.csv.gz")
+peaks_meth<-merge(peaks_cpgs,fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz"))
+length(unique(peaks_meth$peaks)) #66196 peaks
+length(unique(peaks_meth$cpg_id)) #274516 CpGs
 
 
+#term list : peaks DMCs/DEGs
+meth_degs_peaks_list<-list(CpGs=unique(peaks_meth$peaks),
+                         DMCs=unique(peaks_meth[P.Value<0.001&abs(logFC)>25]$peaks),
+                         expressed=unique(peaks_expr$query_region),
+                         DEGs=unique(peaks_expr[padj<0.05&abs(log2FoldChange)>0.5]$query_region),
+                         DMCs_DEGs=intersect(unique(peaks_meth[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(peaks_expr[padj<0.05&abs(log2FoldChange)>0.5]$query_region)))
+lapply(meth_degs_peaks_list, length)
+lapply(meth_degs_peaks_list, head)
 
+#query list : peaks up dn
+da_peaks_list<-list(da_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&abs(avg_log2FC)>0.25]$peak),
+                down_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak),
+                up_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&avg_log2FC>0.25]$peak))
+lapply(da_peaks_list, length)
+lapply(da_peaks_list, head)
+
+#background : peaks test for DA (min.pct>= 0.05)
+fcs<-FoldChange(atacs,subset.ident = "HSC",group.by = "group",ident.1 ="lga",ident.2 = "ctrl" ,assay = "lin_peaks")
+peaks_5pct<-rownames(fcs)[fcs$pct.1>=0.05|fcs$pct.2>=0.05]
+length(peaks_5pct)#80k
+background<-peaks_5pct
+length(background) #79640/215117 peaks (37%)
+head(background)
+
+res_or_da_peaks_dmcs_degs<-OR3(da_peaks_list,
+                    meth_degs_peaks_list,
+                    background = background,
+                    overlap_column = F) 
+
+fwrite(res_or_da_peaks_dmcs_degs,fp(out,"res_da_peaks_enrichment_in_dmcs_degs_hsc_peaks.csv"))
+
+
+#GRN 2.0
 
 
