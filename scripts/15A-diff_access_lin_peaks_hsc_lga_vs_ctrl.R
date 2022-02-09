@@ -1,4 +1,4 @@
-out<-'outputs/14-DMCs_atac_integr/'
+out<-'outputs/15-chromatin_change_LGA_vs_Ctrl/'
 
 source("scripts/utils/new_utils.R")
 library(Seurat)

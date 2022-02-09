@@ -1,4 +1,8 @@
 #chromatin_change_LGA_vs_Ctrl
+source("scripts/utils/new_utils.R")
+library(Seurat)
+#renv::install("Signac")
+library(Signac)
 
 out<-"outputs/15-chromatin_change_LGA_vs_Ctrl"
 dir.create(out)
@@ -77,15 +81,24 @@ ggplot(peaks_hsc_lga_xy,aes(x=avg_log2FC,y=-log10(p_val_adj),col=p_val_adj<0.001
   theme(legend.position = "bottom")
 
 #Motif enrichment
+#background : peaks test for DA (min.pct>= 0.05)
+fcs<-FoldChange(atacs,subset.ident = "HSC",group.by = "group",ident.1 ="lga",ident.2 = "ctrl" ,assay = "lin_peaks")
+peaks_5pct<-rownames(fcs)[fcs$pct.1>=0.05|fcs$pct.2>=0.05]
+sum(fcs$pct.1==0|fcs$pct.2==0) #14k no express in LGA or ctrl
+fcs[fcs$pct.1==0|fcs$pct.2==0,]
+sum((fcs$pct.1==0|fcs$pct.2==0)&fcs$pct.2>0.05) #2
+sum((fcs$pct.1==0|fcs$pct.2==0)&fcs$pct.1>0.05) #3
 
 atacs<-RegionStats(atacs,assay='lin_peaks',genome = BSgenome.Hsapiens.UCSC.hg38)
 
-hsc_lga_tf<-FindMotifs(object = atacs,
+hsc_lga_tf_up<-FindMotifs(object = atacs,
            assay = "lin_peaks",
-           features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC>0.25]$peak )
+           features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC>0.25]$peak,
+           background = peaks_5pct)
 hsc_lga_tf_down<-FindMotifs(object = atacs,
            assay = "lin_peaks",
-           features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC<(-0.25)]$peak )
+           features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC<(-0.25)]$peak,
+           background = peaks_5pct)
 hsc_lga_tf_down
 hsc_lga_tf_all<-rbind(data.table(hsc_lga_tf)[,accessibility:="up"],data.table(hsc_lga_tf_down)[,accessibility:="down"])
 hsc_lga_tf_all[order(pvalue)][1:20]

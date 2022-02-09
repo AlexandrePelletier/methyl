@@ -110,7 +110,7 @@ ggplot(res_or_degs_dmcs_tf)+geom_col(aes(y=log2(fold.enrichment),x=candidat_peak
   theme(axis.text.x = element_text(size = 8))
 ggsave(fp(out,"Ae-barplot_dmcs_tf_peaks_enrichment_in_degs_peaks.pdf"))
 
-#diff accessibility lga vs ctrl HSC
+#f) diff accessibility lga vs ctrl HSC
 inp<-"outputs/15-chromatin_change_LGA_vs_Ctrl/"
 #volcano
 
