@@ -195,8 +195,8 @@ net_egr1 %v% "type" = ifelse(network.vertex.names(net_egr1) %in% regf$tf, "tf", 
 
 #add methyl info
 res_m<-fread("outputs/02-gene_score_calculation_and_validation/res_genes.csv.gz")
-res_m[gene_score_add>500,meth:="cadetblue"]
-res_m[gene_score_add<=500,meth:="cornsilk3"]
+res_m[gene_score_add>500,meth:="darkred"]
+res_m[gene_score_add<=500,meth:="black"]
 
 net_egr1 %v% "meth" = sapply(res_m[network.vertex.names(net_egr1),on="gene"]$meth,function(x)ifelse(is.na(x),"cornsilk3",x))
 
@@ -204,10 +204,12 @@ net_egr1 %v% "meth" = sapply(res_m[network.vertex.names(net_egr1),on="gene"]$met
 #add expr info 
 res_e<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")[lineage=="HSC"]
 
-res_e[padj>0.05,deg:="black"]
-res_e[padj<=0.05&log2FoldChange>0.5,deg:="red"]
-res_e[padj<=0.05&log2FoldChange<(-0.5),deg:="blue"]
-
+res_e[padj>0.05,deg:="cornsilk3"]
+res_e[padj<=0.05&log2FoldChange>0,deg:="coral2"]
+res_e[padj<=0.05&log2FoldChange>0.5,deg:="coral3"]
+res_e[padj<=0.05&log2FoldChange<(0),deg:="cadetblue3"]
+res_e[padj<=0.05&log2FoldChange<(-0.5),deg:="cadetblue4"]
+res_e[padj<=0.05&log2FoldChange<(-0.25)]
 net_egr1 %v% "deg" = res_e[network.vertex.names(net_egr1),on="gene"]$deg
 
 
@@ -222,7 +224,7 @@ res_at[,target:=gene_name]
 
 res_at[p_val_adj<0.001&avg_log2FC>0.25,da:="red"]
 res_at[p_val_adj<0.001&avg_log2FC<(-0.25),da:="blue"]
-res_at[is.na(da),da:="black"]
+res_at[is.na(da),da:="grey75"]
 
 net_egr1 %v% "da" = res_at[network.vertex.names(net_egr1),on="target"]$da
 
@@ -253,8 +255,8 @@ reg_egr1r1_peaks<-merge(reg_egr1r1,
 
 reg_egr1r1_peaks[,n.tf.target.peaks:=.N,by=.(tf,target)]
 reg_egr1r1_peaks[,biggest_change:=p_val==min(p_val),.(tf,target)]
-reg_egr1r1_peaks[(biggest_change)]
-unique(reg_egr1r1_peaks[(biggest_change)],by=c("tf","target"))#ok
+reg_egr1r1_peaks[(biggest_change)|is.na(biggest_change)]
+unique(reg_egr1r1_peaks[(biggest_change)|is.na(biggest_change)],by=c("tf","target"))#ok
 
 
 reg_egr1r1_peaks[,da.peak:=p_val_adj<0.001&abs(avg_log2FC)>0.25]
@@ -263,42 +265,72 @@ reg_egr1r1_peaks[,n.da.tf.target.peaks:=sum(da.peak),.(tf,target)]
 
 reg_egr1r1_peaks[da.peak==T] #9
 
-reg_egr1r1_peak1<-reg_egr1r1_peaks[(biggest_change)]
+reg_egr1r1_peak1<-reg_egr1r1_peaks[(biggest_change)|is.na(biggest_change)]
+
+#add DMCs infos on edge
+#need merge peaks DMCs df with reg_egr1 df
+peaks_cpgs<-fread("outputs/14-DMCs_atac_integr/cpgs_in_lin_OCRs.csv.gz")
+peaks_meth<-merge(peaks_cpgs,fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz"))
+peaks_meth[,peak:=peaks]
+peaks_meth_hsc<-peaks_meth[peak%in%peaks_hsc_genes$peak]
+
+reg_egr1r1_peak1_meth<-merge(reg_egr1r1_peak1,
+                             peaks_meth_hsc[,.(peak,cpg_id,logFC,P.Value,adj.P.Val)],
+                             by="peak",
+                             all.x=T)
+reg_egr1r1_peak1_meth[,n.cpg.peak:=.N,by=.(peak,tf)]
+reg_egr1r1_peak1_meth[,biggest_meth_change:=P.Value==min(P.Value),.(peak,tf)]
+reg_egr1r1_peak1_meth[(biggest_meth_change)|is.na(biggest_meth_change)] #ok
+
+
+reg_egr1r1_peak1_meth[,dmcs:=P.Value<0.001&abs(logFC)>25]
+
+reg_egr1r1_peak1_meth[,n.dmcs.peak:=sum(dmcs),.(peak,tf)]
+
+reg_egr1r1_peak1_meth[dmcs==T] #24
+
+reg_egr1r1_peak1_meth1<-reg_egr1r1_peak1_meth[(biggest_meth_change)|is.na(biggest_meth_change)]
+
 
 #ADD edge atttibute (tf> target) : color depend of if atac based tf> target interact is altered by chromatin change
 #if tf-gene peak dn : blue if tf-gene peak up :  red
 
-net_egr1_a<-network(reg_egr1r1_peak1[,-c("extended","biggest_change")],loops = T,directed = T)
+net_egr1_a<-network(reg_egr1r1_peak1_meth1[,-c("extended","biggest_change","biggest_meth_change","peak")],loops = T,directed = T)
 list.edge.attributes(net_egr1_a)
 as.matrix(net_egr1_a,attrname='da')
+net_egr1_a %e% "da"
+net_egr1_a %e% "da"=sapply(net_egr1_a %e% "da",function(x)ifelse(x=="grey75","darkgrey",x))
 
-set.edge.attribute(net_egr1, "color", ifelse(net_egr1 %e% "dap" > 1, "black", "grey75"))
-ggnet2(bip, shape = "mode", edge.label = "weights", edge.label.color = "color")
+net_egr1_a %e% "dmc_line"=net_egr1_a %e% "n.dmcs.peak"+1
+net_egr1_a %e% "dmc_line"=sapply(net_egr1_a %e% "dmc_line",function(x)ifelse(is.na(x),1,x))
 
+#set.edge.attribute(net_egr1, "color", ifelse(net_egr1 %e% "dap" > 1, "black", "grey75"))
+#add vertices attributes
+net_egr1_a %v% "type" = ifelse(network.vertex.names(net_egr1_a) %in% regf$tf, "tf", "gene")
+net_egr1_a %v% "deg" = res_e[network.vertex.names(net_egr1_a),on="gene"]$deg
+net_egr1_a %v% "deg" = sapply(net_egr1_a %v% "deg",function(x)ifelse(is.na(x),"cornsilk3",x))
+
+net_egr1_a %v% "meth" = sapply(res_m[network.vertex.names(net_egr1_a),on="gene"]$meth,function(x)ifelse(is.na(x),"black",x))
 
 #genes_of_interest<-union(res_e[padj<=0.05&abs(log2FoldChange)>0.5]$gene,union(res_m[gene_score_add>500]$gene,unique(reg_egr1$tf)))
 
 
-#GRN sans selection, label only fgenes of interest
-ggnet2(net_egr1,
-       color = "meth",
-       label = genes_of_interest,label.color = "deg",label.size = 3,
+#GRN sans selection,label all genes
+ggnet2(net_egr1_a,
+       color = "deg",
+       label = T,label.color = "meth",label.size = 2,
        size = "type" ,size.palette = c("tf"=3,"gene"=1),
        shape = "type",
-       edge.alpha = 0.6,
-       arrow.size = 5, arrow.gap =0.01) +
+       edge.alpha = 0.8,
+       edge.size=0.5,
+       edge.color = "da",
+       arrow.size = 5,
+       edge.lty = "dmc_line",
+       arrow.gap =0.02) +
   theme(panel.background = element_rect(fill = "white"))
-ggsave(fp(out,"all_KLF2_FOSB_JUN_EGR1_KLF4_ARID5A_network_label_only_altered_regulons_genes_and_TF_upstream.pdf"),width = 15,height = 10)
 
-ggnet2(net_egr1,
-       color = "meth",
-       label = T,label.color = "deg",label.size = 3,
-       size = "degree" ,size.min = 2,size.cut = 4,
-       shape = "type",
-       edge.alpha = 0.6,
-       arrow.size = 5, arrow.gap =0.02) +
-  theme(panel.background = element_rect(fill = "white"))
-ggsave(fp(out,"all_KLF2_FOSB_JUN_EGR1_KLF4_ARID5A_network_all_label_min2Con.pdf"),width = 10,height = 6)
+ggsave(fp(out,"final_network_EGR1_KLF2_KLF4_tf_targets_2.pdf"))
+reg_egr1r1_peak1_meth1[n.dmcs.peak>1]
 
 summary(res_m[gene_score_add>250])
 res_anno<-fread("outputs/02-gene_score_calculation_and_validation/res_anno.csv.gz")

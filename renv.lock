@@ -921,6 +921,14 @@
         "matrixStats"
       ]
     },
+    "NLP": {
+      "Package": "NLP",
+      "Version": "0.2-1",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "94b0a21c13933f61cf6272a192964624",
+      "Requirements": []
+    },
     "NMF": {
       "Package": "NMF",
       "Version": "0.23.0",
@@ -2164,16 +2172,10 @@
     },
     "cpp11": {
       "Package": "cpp11",
-      "Version": "0.2.6",
-      "Source": "CRAN",
+      "Version": "0.4.2",
+      "Source": "Repository",
       "Repository": "CRAN",
-      "RemoteType": "standard",
-      "RemotePkgRef": "cpp11",
-      "RemoteRef": "cpp11",
-      "RemoteRepos": "https://cloud.r-project.org/",
-      "RemotePkgType": "source",
-      "RemoteSha": "0.2.6",
-      "Hash": "f08909ebdad90b19d8d3930da4220564",
+      "Hash": "fa53ce256cd280f468c080a58ea5ba8c",
       "Requirements": []
     },
     "crayon": {
@@ -2952,6 +2954,17 @@
         "tidyr",
         "tidytree",
         "treeio"
+      ]
+    },
+    "ggvenn": {
+      "Package": "ggvenn",
+      "Version": "0.1.9",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "317f65bef864edb843b67fbdcd14da85",
+      "Requirements": [
+        "dplyr",
+        "ggplot2"
       ]
     },
     "glasso": {
@@ -4789,6 +4802,28 @@
       "Hash": "249d8cd1e74a8f6a26194a91b47f21d1",
       "Requirements": []
     },
+    "rrvgo": {
+      "Package": "rrvgo",
+      "Version": "1.2.0",
+      "Source": "Bioconductor",
+      "git_url": "https://git.bioconductor.org/packages/rrvgo",
+      "git_branch": "RELEASE_3_12",
+      "git_last_commit": "ed38a76",
+      "git_last_commit_date": "2020-10-27",
+      "Hash": "debc317ecd83da3e11e91045e21fe74c",
+      "Requirements": [
+        "AnnotationDbi",
+        "GO.db",
+        "GOSemSim",
+        "ggplot2",
+        "ggrepel",
+        "pheatmap",
+        "shiny",
+        "tm",
+        "treemap",
+        "wordcloud"
+      ]
+    },
     "rsample": {
       "Package": "rsample",
       "Version": "0.1.0",
@@ -5510,6 +5545,20 @@
         "tibble"
       ]
     },
+    "tm": {
+      "Package": "tm",
+      "Version": "0.7-8",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "608413cbdf64d418b6a33e6c3d4d3b25",
+      "Requirements": [
+        "BH",
+        "NLP",
+        "Rcpp",
+        "slam",
+        "xml2"
+      ]
+    },
     "tmvnsim": {
       "Package": "tmvnsim",
       "Version": "1.0-2",
@@ -5537,6 +5586,22 @@
         "rlang",
         "tibble",
         "tidytree"
+      ]
+    },
+    "treemap": {
+      "Package": "treemap",
+      "Version": "2.4-3",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "754d9ed7b25a790451f5da1a62fc7d04",
+      "Requirements": [
+        "RColorBrewer",
+        "colorspace",
+        "data.table",
+        "ggplot2",
+        "gridBase",
+        "igraph",
+        "shiny"
       ]
     },
     "tweenr": {
@@ -5690,6 +5755,17 @@
       "Hash": "60e191a866c5649a8f58a458f5e60edf",
       "Requirements": [
         "cpp11"
+      ]
+    },
+    "wordcloud": {
+      "Package": "wordcloud",
+      "Version": "2.6",
+      "Source": "Repository",
+      "Repository": "CRAN",
+      "Hash": "dddb6538141ed1e2435cb63c6c748d16",
+      "Requirements": [
+        "RColorBrewer",
+        "Rcpp"
       ]
     },
     "xfun": {

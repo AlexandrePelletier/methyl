@@ -117,10 +117,77 @@ library(enrichplot)
 library(org.Hs.eg.db)
 res_dt<-res_lin[lineage=="HSC"]
 
+#gseGO
+res_dt[,deg_score:=-log10(padj)*log2FoldChange]
+#res_dt[,deg_score_rk:=rank(deg_score)]#du plus surexpr au plus downreg
+
+res_dt1<-merge(res_dt,
+              data.table(bitr(res_dt$gene,fromType = "SYMBOL",toType = "ENTREZID",OrgDb = org.Hs.eg.db,drop=F))[,gene:=SYMBOL])[!is.na(ENTREZID)]
+genelist<-res_dt1[order(-deg_score)]$deg_score
+names(genelist)<-res_dt1[order(-deg_score)]$ENTREZID
+
+res_gsea_go<- gseGO(geneList     =genelist , 
+                    ont="BP",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0,
+                        OrgDb = org.Hs.eg.db)
+saveRDS(res_gsea_go,fp(out,"res_gsea_go_bp.rds"))
+dotplot(res_gsea_go,showCategory=50)
+
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[,sens:=ifelse(NES>0,"up","dn")]
+gsea_go_dt[,n.enriched:=length(tr(core_enrichment)),"ID"]
+fwrite(gsea_go_dt,fp(out,"res_gsea_go_bp.csv.gz"))
+
+gsea_go_dt[p.adjust<0.05][order(p.adjust)][1:50]
+
+
+ggplot(gsea_go_dt[p.adjust<0.05],aes(x=Description,y=-log10(p.adjust)))+
+  geom_point(aes(size=n.enriched,col=NES))+
+  facet_grid(~sens,scales = "free_x",space = "free_x")+
+  scale_x_discrete(guide = guide_axis(angle=80))+
+  scale_y_continuous(limits = c(0,))+
+  scale_color_gradient2(low = "blue",mid="grey",high = "red")
+ggplot(gsea_go_dt[p.adjust<0.05])+geom_point(aes(x=Description))
+
+#with rank degscore
+res_dt[log2FoldChange>0,deg_score:=rank(log2FoldChange*-log10(padj))]
+res_dt[log2FoldChange<=0,deg_score:=-rank(abs(log2FoldChange)*-log10(padj))]
+
+
+res_dt1<-merge(res_dt,
+              data.table(bitr(res_dt$gene,fromType = "SYMBOL",toType = "ENTREZID",OrgDb = org.Hs.eg.db,drop=F))[,gene:=SYMBOL])[!is.na(ENTREZID)]
+genelist<-res_dt1[order(-deg_score)]$deg_score
+names(genelist)<-res_dt1[order(-deg_score)]$ENTREZID
+
+res_gsea_go<- gseGO(geneList     =genelist , 
+                    ont="BP",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0,
+                        OrgDb = org.Hs.eg.db)
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[,sens:=ifelse(NES>0,"up","dn")]
+gsea_go_dt[,n.enriched:=length(tr(core_enrichment)),"ID"]
+gsea_go_dt[p.adjust<0.05]
+gsea_go_dt[p.adjust<0.05&NES<0]$Description
+
+saveRDS(res_gsea_go,fp(out,"res_gsea_go_bp_rank.rds"))
+fwrite(gsea_go_dt,fp(out,"res_gsea_go_bp_rank.csv.gz"))
+
+
+#enrich
 # -kegg
+possible_genes<-rownames(readRDS('outputs/06-integr_singlecell_cbps/cbps_light.rds'))
+
 res_kegg<-enrichKEGG(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe = bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 res_kegg_dt<-data.table(as.data.frame(res_kegg))
 res_kegg_dt[p.adjust<0.1]#4 : TNF, MAPK, Foxo
 saveRDS(res_kegg,fp(out,"res_kegg.rds"))
@@ -129,7 +196,9 @@ fwrite(res_kegg_dt,fp(out,"res_kegg.csv"))
 #up
 res_kegg_up<-enrichKEGG(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe = bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 res_kegg_dt<-data.table(as.data.frame(res_kegg_up))
 res_kegg_dt[p.adjust<0.1]#1 : Phosphatidylinositol signaling system 
 saveRDS(res_kegg_up,fp(out,"res_kegg_up.rds"))
@@ -138,16 +207,18 @@ fwrite(res_kegg_dt,fp(out,"res_kegg_up.csv"))
 #dn
 res_kegg_dn<-enrichKEGG(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 res_kegg_dt<-data.table(as.data.frame(res_kegg_dn))
-res_kegg_dt[p.adjust<0.1]#14 : TNF, MAPK, FOXO, NFKB...
+res_kegg_dt[p.adjust<0.1]#12: TNF, MAPK
 saveRDS(res_kegg_dn,fp(out,"res_kegg_dn.rds"))
 fwrite(res_kegg_dt,fp(out,"res_kegg_dn.csv"))
 
 
 #gseKegg
 fcs<-res_dt$log2FoldChange*-log10(res_dt$pvalue)
-names(fcs)<-res_dt$gene
+names(fcs)<-possible_genes
 fcs<-sort(fcs,decreasing = T)
 head(fcs)
 
@@ -195,60 +266,72 @@ res_kegg_dt#yes !
 # -go
 
 #molecular function
-res_go_mf<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.6]$gene,fromType = "SYMBOL",
+res_go_mf<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_mf))
-res_go_dt[p.adjust<0.2]#47
+res_go_dt[p.adjust<0.1]#14:HSP, methyltrafe
 saveRDS(res_go_mf,fp(out,"res_go_mf.rds"))
 fwrite(res_go_dt,fp(out,"res_go_mf.csv.gz"))
 
 #biological process
-res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.6]$gene,fromType = "SYMBOL",
+res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_bp))
-res_go_dt[p.adjust<0.1]#48
+res_go_dt[p.adjust<0.1]#47
 saveRDS(res_go_bp,fp(out,"res_go_bp.rds"))
 fwrite(res_go_dt,fp(out,"res_go_bp.csv.gz"))
 
 #up
-res_go_mf_up<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.6]$gene,fromType = "SYMBOL",
+res_go_mf_up<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_mf_up))
-res_go_dt[p.adjust<0.2]#54, wiuth methyl transferase acctivity
+res_go_dt[p.adjust<0.1]#0
 saveRDS(res_go_mf_up,fp(out,"res_go_mf_up.rds"))
 fwrite(res_go_dt,fp(out,"res_go_mf_up.csv.gz"))
 
-res_go_bp_up<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.6]$gene,fromType = "SYMBOL",
+res_go_bp_up<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_bp_up))
-res_go_dt[p.adjust<0.2]#0
+res_go_dt[p.adjust<0.1]#0
 saveRDS(res_go_bp_up,fp(out,"res_go_bp_up.rds"))
 fwrite(res_go_dt,fp(out,"res_go_bp_up.csv.gz"))
 
 #dn
-res_go_mf_dn<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.6)]$gene,fromType = "SYMBOL",
+res_go_mf_dn<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_mf_dn))
-res_go_dt[p.adjust<0.2]#21
+res_go_dt[p.adjust<0.1]#13
 saveRDS(res_go_mf_dn,fp(out,"res_go_mf_dn.rds"))
 fwrite(res_go_dt,fp(out,"res_go_mf_dn.csv.gz"))
 
-res_go_bp_dn<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.6)]$gene,fromType = "SYMBOL",
+res_go_bp_dn<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 res_go_dt<-data.table(as.data.frame(res_go_bp_dn))
-res_go_dt[p.adjust<0.1]#
+res_go_dt[p.adjust<0.1]#80
 saveRDS(res_go_bp_dn,fp(out,"res_go_bp_dn.rds"))
 fwrite(res_go_dt,fp(out,"res_go_bp_dn.csv.gz"))
 

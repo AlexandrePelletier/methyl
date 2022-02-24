@@ -10,7 +10,7 @@ cbps6<-cbps[,str_detect(cbps$batch,"[0-6]")]
 
 #major gene expr differences
 library(ComplexHeatmap)
-genes_diff<-data.table(FindMarkers(,group.by = "hto",ident.1 = "TRUE",ident.2 ="FALSE" ),keep.rownames = "gene")
+genes_diff<-data.table(FindMarkers(group.by = "hto",ident.1 = "TRUE",ident.2 ="FALSE" ),keep.rownames = "gene")
 genes_diff #4078 DEGs
 avg_expr<-AverageExpression(cbps6,group.by = "sample",assays = "SCT",slot = "data")$SCT
 

@@ -38,36 +38,36 @@ gene_scores<-gene_scores[genes.df$SYMBOL]
 names(gene_scores)<-genes.df$ENTREZID
 res_gsea_kegg<- gseKEGG(geneList     = rank(gene_scores),
                         organism     = 'hsa', 
-                        minGSSize    = 50,
-                        pvalueCutoff = 0.001,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
                         verbose = FALSE)
-nrow(as.data.frame(res_gsea_kegg))#63
 
 dotplot(res_gsea_kegg,showCategory=63)
-gsea_kegg<-data.table(as.data.frame(res_gsea_kegg))
-gsea_kegg[,gene_score.avg:=mean(resg$gene_score_add[resg$gene %in% tr(core_enrichment,tradEntrezInSymbol = T)],na.rm=T),.(ID)]
+gsea_kegg_dt<-data.table(as.data.frame(res_gsea_kegg))
+gsea_kegg_dt[p.adjust<0.001]
+gsea_kegg_dt[p.adjust<0.001,gene_score.avg:=mean(resg$gene_score_add[resg$gene %in% tr(core_enrichment,tradEntrezInSymbol = T)],na.rm=T),.(ID)]
 
 dotplot(res_gsea_kegg,x=gsea_kegg$gene_score.avg,showCategory=63)
 
 emapplot(pairwise_termsim(res_gsea_kegg,showCategory = 63))
 saveRDS(res_gsea_kegg,fp(out,"res_gsea_kegg.rds"))
-fwrite(gsea_kegg,fp(out,"res_gsea_kegg.csv"))
+fwrite(gsea_kegg_dt,fp(out,"res_gsea_kegg.csv"))
 
 #GSE GO
 
 res_gsea_go<- gseGO(geneList     = rank(gene_scores), 
-                        minGSSize    = 50,
-                        pvalueCutoff = 0.001,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
                         eps = 0,
                         OrgDb = org.Hs.eg.db)
-nrow(as.data.frame(res_gsea_go))#699
+nrow(as.data.frame(res_gsea_go))#5986
 
 dotplot(res_gsea_go,showCategory=20)
-gsea_go<-data.table(as.data.frame(res_gsea_go))
-gsea_go[,gene_score.avg:=mean(resg$gene_score_add[resg$gene %in% tr(core_enrichment,tradEntrezInSymbol = T)],na.rm=T),.(ID)]
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[p.adjust<0.001,gene_score.avg:=mean(resg$gene_score_add[resg$gene %in% tr(core_enrichment,tradEntrezInSymbol = T)],na.rm=T),.(ID)]
 
 saveRDS(res_gsea_go,fp(out,"res_gsea_go.rds"))
-fwrite(gsea_go[order(p.adjust)],fp(out,"res_gsea_go.csv"))
+fwrite(gsea_go_dt[order(p.adjust)],fp(out,"res_gsea_go.csv"))
 
 dotplot(res_gsea_go,x=gsea_go[order(p.adjust)]$gene_score.avg[1:40],showCategory=40)
 

@@ -88,16 +88,6 @@ res_de_cl<-res_de_cl[!is.na(padj)]
 meth_scores_de<-merge(meth_scores,res_de_cl,by=c("gene"))
 unique(meth_scores_de[padj<0.05]$gene)#362 DEGS
 
-#        meth_metric         pval
-# 1:  gene_score_add 0.0006818586
-# 2:        min.pval 0.0249488972
-# 3:        avg.pval 0.7968159120
-# 4:      mlog10pval 0.0757731002
-# 5:     meth.change 0.0180098893
-# 6: avg.mlog10.pval 0.3534897816
-# 7: avg.meth.change 0.0368265523
-# 8:   max.dmc_score 0.0192803029
-# 9:   avg.dmc_score 0.4128018069
 
 meth_scores_de[,score_scaled:=scale(score),by="meth_metric"]
 meth_scores_de$meth_metric<-factor(meth_scores_de$meth_metric,levels = c("min.pval","mlog10pval","meth.change","avg.pval","avg.mlog10.pval","avg.meth.change","max.dmc_score", "avg.dmc_score","gene_score_add"))
@@ -110,10 +100,17 @@ ggsave(fp(out,"suppfig1-gene_score_pred_expression_change_compared_9classical_me
 
 meth_scores_de[,pval:=wilcox.test(score[padj<0.05],score[padj>=0.05])$p.value,by="meth_metric"]
 unique(meth_scores_de[,.(meth_metric,pval)],by="meth_metric")
-#       meth_metric         pval
-# 1: gene_score_add 0.0006818586
-# 2:     mlog10pval 0.0757731002
-# 3:    meth.change 0.0180098893
+
+#        meth_metric         pval
+# 1:  gene_score_add 0.0006818586
+# 2:        min.pval 0.0249488972
+# 3:        avg.pval 0.7968159120
+# 4:      mlog10pval 0.0757731002
+# 5:     meth.change 0.0180098893
+# 6: avg.mlog10.pval 0.3534897816
+# 7: avg.meth.change 0.0368265523
+# 8:   max.dmc_score 0.0192803029
+# 9:   avg.dmc_score 0.4128018069
 
 ggplot(unique(meth_scores_de,by="meth_metric"))+geom_col(aes(y=-log10(pval),x=meth_metric))+
   theme(axis.text.x = element_text(angle = 45,hjust = 1))

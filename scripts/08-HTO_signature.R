@@ -230,40 +230,108 @@ res_dt[padj<0.05&abs(log2FoldChange)>0.5] #1518
 res_dt[padj<0.05&log2FoldChange>0.5] #1075
 1518-1075 #443
 
+
+#gseGO
+res_dt[,deg_score:=log2FoldChange*-log10(padj)]
+#res_dt[,deg_score_rk:=rank(deg_score)]#du plus surexpr au plus downreg
+
+res_dt1<-merge(res_dt,
+              data.table(bitr(res_dt$gene,fromType = "SYMBOL",toType = "ENTREZID",OrgDb = org.Hs.eg.db,drop=F))[,gene:=SYMBOL])[!is.na(ENTREZID)]
+genelist<-res_dt1[order(-deg_score)]$deg_score
+names(genelist)<-res_dt1[order(-deg_score)]$ENTREZID
+
+res_gsea_go<- gseGO(geneList     =genelist , 
+                    ont="BP",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0,
+                        OrgDb = org.Hs.eg.db)
+saveRDS(res_gsea_go,fp(out,"res_gsea_go_bp.rds"))
+res_gsea_go<-readRDS(fp(out,"res_gsea_go_bp.rds"))
+
+dotplot(res_gsea_go,showCategory=50)
+
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[,sens:=ifelse(NES>0,"up","dn")]
+gsea_go_dt[,n.enriched:=length(tr(core_enrichment)),"ID"]
+gsea_go_dt[p.adjust<0.05]
+gsea_go_dt[p.adjust<0.05&NES>0]$Description
+
+fwrite(gsea_go_dt,fp(out,"res_gsea_go_bp.csv.gz"))
+gsea_go_dt<-fread(fp(out,"res_gsea_go_bp.csv.gz"))
+
+#with rank degscore
+res_dt[log2FoldChange>0,deg_score:=rank(log2FoldChange*-log10(padj))]
+res_dt[log2FoldChange<=0,deg_score:=-rank(abs(log2FoldChange)*-log10(padj))]
+
+#res_dt[,deg_score_rk:=rank(deg_score)]#du plus surexpr au plus downreg
+
+res_dt1<-merge(res_dt,
+              data.table(bitr(res_dt$gene,fromType = "SYMBOL",toType = "ENTREZID",OrgDb = org.Hs.eg.db,drop=F))[,gene:=SYMBOL])[!is.na(ENTREZID)]
+genelist<-res_dt1[order(-deg_score)]$deg_score
+names(genelist)<-res_dt1[order(-deg_score)]$ENTREZID
+
+res_gsea_go<- gseGO(geneList     =genelist , 
+                    ont="BP",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0,
+                        OrgDb = org.Hs.eg.db)
+saveRDS(res_gsea_go,fp(out,"res_gsea_go_bp_rank.rds"))
+dotplot(res_gsea_go,showCategory=50)
+
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[,sens:=ifelse(NES>0,"up","dn")]
+gsea_go_dt[,n.enriched:=length(tr(core_enrichment)),"ID"]
+gsea_go_dt[p.adjust<0.05]
+gsea_go_dt[p.adjust<0.05&NES>0]$Description
+
+fwrite(gsea_go_dt,fp(out,"res_gsea_go_bp_rank.csv.gz"))
+
+#enrich
+possible_genes<-rownames(readRDS('outputs/06-integr_singlecell_cbps/cbps_light.rds'))
 # -kegg
 res_kegg<-enrichKEGG(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 saveRDS(res_kegg,fp(out,"res_hto_signature_kegg.rds"))
 res_kegg_dt<-data.table(as.data.frame(res_kegg))
-res_kegg_dt[p.adjust<0.1]#44 : MAPK, TNF, IL17 ,TGFB, Hippo, Longevity, FOxo...
+res_kegg_dt[p.adjust<0.1]#39 : MAPK, TNF, microrna in cancer
 fwrite(res_kegg_dt,fp(out,"res_hto_signature_kegg.csv"))
 
 
 res_kegg_up<-enrichKEGG(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 saveRDS(res_kegg_up,fp(out,"res_hto_signature_kegg_up.rds"))
 res_kegg_up<-readRDS("outputs/08-HTO_signature/res_hto_signature_kegg_up.rds")
 
 res_kegg_dt<-data.table(as.data.frame(res_kegg_up))
-res_kegg_dt[p.adjust<0.1]# 72 : MAPK, TNF, IL17, FOXO, TGFB, NFKB...
+res_kegg_dt[p.adjust<0.1]# 38 : MAPK, TNF, IL17, FOXO, TGFB, Hippo..
 fwrite(res_kegg_dt,fp(out,"res_hto_signature_kegg_up.csv"))
 
 
-res_kegg_dn-enrichKEGG(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
+res_kegg_dn<-enrichKEGG(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,
-                 organism = "hsa",pvalueCutoff = 1)
+                 organism = "hsa",pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 saveRDS(res_kegg_dn,fp(out,"res_hto_signature_kegg_dn.rds"))
 res_kegg_dn<-readRDS("outputs/08-HTO_signature/res_hto_signature_kegg_dn.rds")
 
 res_kegg_dt<-data.table(as.data.frame(res_kegg_dn))
-res_kegg_dt[p.adjust<0.1]#14 :TNF, MAPK, FOXO, NFKB ..
+res_kegg_dt[p.adjust<0.1]#11 : Biosynthesis of unsaturated fatty acids,Oxidative phosphorylation 
 fwrite(res_kegg_dt,fp(out,"res_hto_signature_kegg_dn.csv"))
 
 #gsekegg
 fcs<-res_dt$log2FoldChange*-log10(res_dt$pvalue)
-names(fcs)<-res_dt$gene
+names(fcs)<-possible_genes
 fcs<-sort(fcs,decreasing = T)
 head(fcs)
 
@@ -293,17 +361,22 @@ fwrite(res_kegg_dt,fp(out,"res_hto_signature_kegg.csv"))
 
 
 # -go
-res_go_mf<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.6]$gene,fromType = "SYMBOL",
+res_go_mf<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "MF",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 0.05)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
+
 
 saveRDS(res_go_mf,fp(out,"res_hto_signature_go_mf.rds"))
 res_go_mf_dt<-data.table(as.data.frame(res_go_mf))
 fwrite(res_go_mf_dt,fp(out,"res_hto_signature_go_mf.csv"))
 
-res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.6]$gene,fromType = "SYMBOL",
+res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&abs(log2FoldChange)>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 0.05)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 
 saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp.rds"))
 res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
@@ -312,16 +385,25 @@ fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp.csv"))
 #go bp up
 res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange>0.5]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp_up.rds"))
+res_go_bp<-readRDS(fp(out,"res_hto_signature_go_bp_up.rds"))
+
 res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
+res_go_bp_dt[p.adjust<0.1]#312
 fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp_up.csv"))
+
 #go bp dn
 res_go_bp<-enrichGO(bitr(res_dt[padj<0.05&log2FoldChange<(-0.5)]$gene,fromType = "SYMBOL",
                              toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
-                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1)
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,
+                 universe =bitr(possible_genes,fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
 saveRDS(res_go_bp,fp(out,"res_hto_signature_go_bp_dn.rds"))
 res_go_bp_dt<-data.table(as.data.frame(res_go_bp))
+res_go_bp_dt[p.adjust<0.1]#103
 fwrite(res_go_bp_dt,fp(out,"res_hto_signature_go_bp_dn.csv"))
 
 #b) signature by lineage####
