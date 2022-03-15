@@ -290,6 +290,26 @@ gsea_go_dt[p.adjust<0.05&NES>0]$Description
 
 fwrite(gsea_go_dt,fp(out,"res_gsea_go_bp_rank.csv.gz"))
 
+#kegg
+res_gsea_kegg<- gseKEGG(geneList     =genelist , 
+                    organism = "hsa",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0)
+
+dotplot(res_gsea_kegg,showCategory=50)
+
+res_gsea_kegg_dt<-data.table(as.data.frame(res_gsea_kegg))
+res_gsea_kegg_dt[,sens:=ifelse(NES>0,"up","dn")]
+res_gsea_kegg_dt[,n.enriched:=length(tr(core_enrichment)),"ID"]
+res_gsea_kegg_dt[p.adjust<0.05]
+res_gsea_kegg_dt[p.adjust<0.05&NES>0]$Description
+
+saveRDS(res_gsea_kegg,fp(out,"res_gsea_kegg.rds"))
+fwrite(res_gsea_kegg_dt,fp(out,"res_gsea_kegg.csv.gz"))
+
+
 #enrich
 possible_genes<-rownames(readRDS('outputs/06-integr_singlecell_cbps/cbps_light.rds'))
 # -kegg

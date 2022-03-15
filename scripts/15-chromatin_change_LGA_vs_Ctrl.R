@@ -65,12 +65,12 @@ MotifPlot(
 )
 
 #2) diff accessi ctrl lga####
-DefaultAssay(atacs)<-"lin_peaks"
+#Run 15A
+peaks_hsc_lga<-fread(fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_logFC0.csv.gz"))
 
 peaks_hsc_lga #rm sexual chromosome
 
 peaks_hsc_lga_xy<-peaks_hsc_lga[!str_detect(peak,"chr[XY]")]
-atacs@assays$lin_peaks
 
 fwrite(peaks_hsc_lga_xy,fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))
 

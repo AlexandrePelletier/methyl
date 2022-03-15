@@ -64,7 +64,7 @@ nrow(as.data.frame(res_gsea_go))#5986
 
 dotplot(res_gsea_go,showCategory=20)
 gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
-gsea_go_dt[p.adjust<0.001,gene_score.avg:=mean(resg$gene_score_add[resg$gene %in% tr(core_enrichment,tradEntrezInSymbol = T)],na.rm=T),.(ID)]
+gsea_go_dt[Description=="regulation of growth"]
 
 saveRDS(res_gsea_go,fp(out,"res_gsea_go.rds"))
 fwrite(gsea_go_dt[order(p.adjust)],fp(out,"res_gsea_go.csv"))
@@ -72,6 +72,20 @@ fwrite(gsea_go_dt[order(p.adjust)],fp(out,"res_gsea_go.csv"))
 dotplot(res_gsea_go,x=gsea_go[order(p.adjust)]$gene_score.avg[1:40],showCategory=40)
 
 emapplot(pairwise_termsim(res_gsea_go,showCategory = 40),showCategory = 40)
+res_gsea_go<- gseGO(geneList     = rank(gene_scores), 
+                    ont="BP",
+                        minGSSize    = 10,maxGSSize = 600,
+                        pvalueCutoff = 1,
+                        eps = 0,
+                        OrgDb = org.Hs.eg.db)
+nrow(as.data.frame(res_gsea_go))#5986
+
+dotplot(res_gsea_go,showCategory=20)
+gsea_go_dt<-data.table(as.data.frame(res_gsea_go))
+gsea_go_dt[Description=="regulation of growth"]
+
+saveRDS(res_gsea_go,fp(out,"res_gsea_go_bp_all.rds"))
+fwrite(gsea_go_dt[order(p.adjust)],fp(out,"res_gsea_go_bp_all.csv"))
 
 #GSE GWAS
 

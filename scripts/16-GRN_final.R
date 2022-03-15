@@ -114,11 +114,16 @@ mean(unlist(lapply(1:length(regulons_atac_listf),
 regulons<-Reduce(rbind,lapply(names(regulons_atac_listf), function(t)data.table(tf=rep(t,length(regulons_atac_listf[[t]])),target=regulons_atac_listf[[t]])))
 regulons[,extended:=str_detect(tf,"e$")]
 regulons[,tf:=str_remove(tf,"e$")]
-regulons[(extended)] #25397 tf> target interaction
-regulons[(!extended)] #4808 tf> target interaction with high confidence
+regulons[(extended)] #25397 tf > target interaction
+regulons[(!extended)] #4808 tf > target interaction with high confidence
 fwrite(regulons,fp(out,"tf_target_interactions.csv"))
 regulons<-fread(fp(out,"tf_target_interactions.csv"))
 
+#%TF-target conserved
+regulonsf<-fread(fp(out,"tf_target_interactions.csv"))[!(extended)]
+regulons_old<-fread("outputs/10-SCENIC/regulons.csv")
+res_conserved<-sapply(unique(regulons_old$tf), function(t)length(intersect(regulons_old[tf==t]$gene,regulonsf[tf==t]$target))/nrow(regulons_old[tf==t]))
+res_conserved[c("EGR1","KLF2","KLF4")]
 #start build network only with tf> interact with high conf
 regf<-regulons[(!extended)]
 
@@ -332,46 +337,7 @@ ggnet2(net_egr1_a,
 ggsave(fp(out,"final_network_EGR1_KLF2_KLF4_tf_targets_2.pdf"))
 reg_egr1r1_peak1_meth1[n.dmcs.peak>1]
 
-summary(res_m[gene_score_add>250])
-res_anno<-fread("outputs/02-gene_score_calculation_and_validation/res_anno.csv.gz")
-
-res_anno[,ncpg.region:=.N,by=.(region_type,gene)]
-res_anno[,ncpg.prom:=sum(region_type=="promoter"),by="gene"]
-res_anno[,ncpg.enh:=sum(region_type=="other"),by="gene"]
-
-resg<-unique(res_anno[order(gene,pval)],by="gene")
-resg[gene_score_add>700&pval>0.01]
-plot(density(resg$gene_score_add))
-
-#with only egr1 modul
-egr1_modul<-c("KLF2","FOSB","JUN","EGR1","KLF4","ARID5A","KLF10","JUNB")
-reg_egr1_o<-regf[tf%in%egr1_modul&target%in%egr1_modul] 
-
-net_egr1o<-as.network(reg_egr1_o[,.(tf,target)],loops = T,directed = T)
-
-
-ggnet2(net_egr1o,label=T,
-       edge.alpha = 0.6,
-       arrow.size = 5, arrow.gap =0.02) +
-  theme(panel.background = element_rect(fill = "white"))
-
-ggsave(fp(out,"network_altered_regulons_and_genes.pdf"))
-
-ggnet2(net_egr1f,
-       color = "meth",
-       label = T,label.color = "deg",label.size = 3,
-       size = "degree",size.min = 2,size.cut = 4,
-       shape = "type" ,
-       edge.alpha = 0.7,
-       arrow.size = 5, arrow.gap =0.02) +
-  theme(panel.background = element_rect(fill = "white"))
-
-
-ggsave(fp(out,"network_altered_regulons_and_genes_mincon2.pdf"))
 
 
 
-
-### Complete =======================================================================================
-message("Success!", appendLF = TRUE)
 

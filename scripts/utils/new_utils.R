@@ -378,6 +378,8 @@ FindGOGenes<-function(terms_or_ids){
   return(data.table(gene.data))
     }
 
+
+
 FindGO_ID<-function(term_descriptions){
   require("GO.db")
   terms<-Term(GOTERM)
@@ -385,5 +387,114 @@ FindGO_ID<-function(term_descriptions){
   return(ids)
 }
 
-GOFrame(x = "GO:0030308")
+####Signac####
+GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
+  if(is.null(assay))assay<-DefaultAssay(object)
+  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
+  if(return_dt){
+    return(
+      data.table(motif.name=motif.names,
+                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
+      )
+    }else{
+  return(names(object@assays[[assay]]@motifs@motif.names[idx]))
+    }
+  
+}
 
+CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
+  require("Signac")
+  if(is.null(assay))assay<-DefaultAssay(object)
+  motif<-GetMotifID(object,motif.name,assay=assay)
+  motif.all <- GetMotifData(
+    object = object, assay = assay, slot = "data"
+  )
+  
+  motifs_peaks_tf <- motif.all[peaks,motif , drop = FALSE]
+  if(return.peaks){
+    motifs_peaks_tf<-rownames(motifs_peaks_tf)[as.vector(motifs_peaks_tf==1)]
+    return(motifs_peaks_tf)
+  }else{
+    motifs_peaks_tf_vec<-as.vector(motifs_peaks_tf==1)
+    names(motifs_peaks_tf_vec)<-rownames(motifs_peaks_tf)
+    return(motifs_peaks_tf_vec)
+  }
+  
+ 
+}
+start<-function(x)as.numeric(strsplit(x,"-")[[1]][2])
+end<-function(x)as.numeric(strsplit(x,"-")[[1]][3])
+seqid<-function(x)strsplit(x,"-")[[1]][1]
+  
+
+MethChangePlot<-function(res_meth,region){
+   start.pos <- start(region)
+  end.pos <- end(region)
+  chromosome <- seqid(region)
+  res_meth_reg<-res_meth[chr==chromosome&pos>start.pos&pos<end.pos]
+  res_meth_reg[,start:=pos][,end:=pos+1]
+  p<-ggplot(data = res_meth_reg) + geom_segment(aes(x = start, y = 0, 
+        xend = end, yend = logFC,col=-log10(P.Value)), size = 2, data = res_meth_reg)+
+    scale_color_gradient(low = "white",high = "black")
+  
+  p<-p+ theme_classic() + ylab(label = "Methylation change") + 
+      xlab(label = paste0(chromosome, " position (bp)")) + 
+      xlim(c(start.pos, end.pos))
+
+  return(p)
+}
+
+TFMotifPlot<-function(object,region,motif.name,assay=NULL){
+  if(is.null(assay))assay<-DefaultAssay(object)
+  start.pos <- start(region)
+  end.pos <- end(region)
+  chromosome <- seqid(region)
+  ranges<-object@assays[[assay]]@motifs@positions[[GetMotifIDs(object,motif.names = motif.name)]]
+  dt <- data.table(as.data.frame(ranges))
+  dt_reg<-dt[seqnames==chromosome&start>start.pos&end<end.pos]
+  
+  p<-ggplot(data = dt_reg) + geom_segment(aes(x = start, y = 0, 
+        xend = end, yend = 0),col="black", size = 2, data = dt_reg)
+  
+  p<-p+ theme_classic() + ylab(label = motif.name) + 
+        theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+      xlab(label = paste0(chromosome, " position (bp)")) + 
+      xlim(c(start.pos, end.pos))
+  return(p)
+}
+
+TFsMotifPlot<-function(object,region,motif.names,assay=NULL,size=2,alpha=1,pad=0){
+  if(is.null(assay))assay<-DefaultAssay(object)
+  start.pos <- start(region)
+  end.pos <- end(region)
+  chromosome <- seqid(region)
+
+  dt_region <-Reduce(rbind,lapply(motif.names,function(x){
+    
+    ranges<-object@assays[[assay]]@motifs@positions[GetMotifIDs(object,motif.names = x)]
+
+    dt<-data.table(as.data.frame(ranges))[seqnames==chromosome&start>start.pos&end<end.pos][,motif.name:=x]
+    return(dt)
+    }
+    ))
+  
+  
+  p<-ggplot(data = dt_region) + geom_segment(aes(x = start-pad, y = 0, 
+        xend = end+pad, yend = 0,col=motif.name), size = size,alpha=alpha, data = dt_region)
+  
+  p<-p+ theme_classic() + ylab(label = "TF motif") + 
+        theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+      xlab(label = paste0(chromosome, " position (bp)")) + 
+      xlim(c(start.pos, end.pos))
+  return(p)
+}
+ 
+
+pctPC<-function(pca,rngPCs="all"){
+  if(is.character(rngPCs)){
+    rngPCs<-1:length(pca$sdev)
+  }
+  pct.varPCs<-pca$sdev[rngPCs]^2/sum(pca$sdev^2)
+  names(pct.varPCs)<-rngPCs
+  return( pct.varPCs)
+}

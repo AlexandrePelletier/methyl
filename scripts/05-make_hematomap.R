@@ -71,12 +71,14 @@ ggsave(fp(out,"umap_SCT_percent.mt_CC.Difference_rpca_integrated_leiden_res0.6.p
 
 DimPlot(hmap,label = T,group.by = "seurat_clusters")
 #markers identif 
+Idents(hmap)<-"seurat_clusters"
+DefaultAssay(hmap)<-"integrated"
 markers<-FindAllMarkers(hmap, min.pct = 0.3, only.pos = TRUE, logfc.threshold = 0.4)
-source("scripts/utils/seurat_utils.R")
-source("scripts/utils/scoreCluster.R")
+source("../singlecell/scripts/utils/seurat_utils.R")
+source("../singlecell/scripts/utils/scoreCluster.R")
 markers<-scoreMarquageCluster(markers,hmap,seuil = "intraClusterFixe",filtreMin = 2)
 markers<-annotMarkers(markers)
-
+fwrite()
 View(markers)
 feat1<-c("ID1","EGR1","IRF1","GATA2","GATA1","MPO","KLF2","LTB","VPREB1")
 FeaturePlot(hmap,feat1)
@@ -135,9 +137,12 @@ head(hmap[[]])
 
 mtd<-data.table(hmap@meta.data,keep.rownames = "bc")
 ct<-unique(mtd[,.(seurat_clusters,cell_type)])
-ct[,cluster:=as.numeric(seurat_clusters)]
+ct[,cluster:=as.factor(seurat_clusters)]
 markers<-merge(markers,ct[,.(cluster,cell_type)])
-fwrite(markers,fp(out,paste0(sample_name,"SCT_Leiden_res0.6_markers.csv.gz")),sep=";")
+
+
+
+
 
 #hSC-2 really HSC ?
 DefaultAssay(hmap)<-"SCT"
@@ -168,7 +173,17 @@ hmap[["lineage"]]<-sapply(as.character(hmap@meta.data$cell_type), function(ct){
 DimPlot(hmap,label = T,group.by="cell_type")
 DimPlot(hmap,label = T,group.by="lineage")
 
+lin<-unique(mtd[,.(seurat_clusters,lineage)])
+lin[,cluster:=as.numeric(seurat_clusters)]
+markers<-merge(markers,lin[,.(cluster,lineage)])
+fwrite(markers,fp(out,paste0(sample_name,"SCT_Leiden_res0.6_markers.csv.gz")),sep=";")
 
+Idents(hmap)<-"lineage"
+m_lin<-FindAllMarkers(hmap, min.pct = 0.3, only.pos = TRUE, logfc.threshold = 0.4)
+m_lin2<-scoreMarquageCluster(m_lin,hmap,seuil = "intraClusterFixe",filtreMin = 0)
+m_lin3<-annotMarkers(m_lin2)
+m_lin3[cluster=='MPP/LMPP'&MarqueurPops!=""]
+fwrite(m_lin3,fp(out,"markers_lineage_annotated.csv.gz"))
 hmap<-RunUMAP(hmap,dims=1:50,
                    reduction.name="ref.umap",
                    reduction.key = "refUMAP_",
