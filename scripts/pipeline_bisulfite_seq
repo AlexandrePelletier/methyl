@@ -1,0 +1,33 @@
+# Bisulfite Sequencing analysis (BiSeq)
+#Goal : Biseq allow the analysis of the DNA methylome thanks to bisulfite converted DNA sequences.  the Bisulfite convert in DNA every Cytosine (C) in Thymine (T) except for Cytosine wich are methylated.  This pipeline aim to count the number of C converted in T to evaluate the level of methylation of the DNA at specific locis.
+
+#Tool used : Bismark, which works on bash (downloadable here : https://www.bioinformatics.babraham.ac.uk/projects/bismark/)
+#user guide : https://rawgit.com/FelixKrueger/Bismark/master/Docs/Bismark_User_Guide.html
+
+##Pipeline###
+#1) Create bisulfite converted references from your reference fasta
+tools/bismark/Bismark-0.23.0/bismark_genome_preparation --path_to_aligner {path_to_bowtie} --verbose {path_to_fasta_folder}
+
+
+#2) map reads on these references and count for C/T conversion
+tools/bismark/Bismark-0.23.0/bismark --genome {fasta_dir} --local --non_directional --bowtie2 --path_to_bowtie2 {path_bowtie} --samtools_path {samtools_path} -o {out_dir} -n 1 -l 20 {fastq_R1} #options `-n 1` allow 1 mismatch for mapping, and `-l 20` is for length of the seed to align during multiseed alignment.
+#Note: You can also performed this analysis with paired end fastq, by adding specific option (see user guide)
+
+#[optional] make an html global report from reports already generated in step 2)
+tools/bismark/Bismark-0.23.0/bismark2report --dir {out_dir} --alignment_report {path_to_bismark_bt2_SE_report.txt} --dedup_report NONE --splitting_report {path_to_bismark_bt2_splitting_report.txt} --mbias_report {path_to_bismark_bt2.M-bias.txt}
+
+
+
+#3)extract from the bam file the methylation status of every Cytosine
+
+tools/bismark/Bismark-0.23.0/bismark_methylation_extractor --merge_non_CpG --samtools_path {samtools_path} -o {out_dir} {path_to_bam}
+
+##=> Generate "CpG_OT_{sample_name}_bismark_bt2.txt" tables containing methylation status ("+" if methylated "-" if not) of CpG locus in every read.
+
+##=> Generate also a "Non_CpG_OT_{sample_name}_bismark_bt2.txt" table containing methylation status of Cytosine in every read  not in CpG context which theorically should be not methylated. So this file allow to estimate the Bisulfite conversion efficiency by calculating the % of non CpG Cytosine which appear methylated (i.e. the C is remained a C after Bisulfite conversion) is equal
+
+##You can after calculate the %Methylation at every CpG locus by dividing the number of methylated C / the number  of total read containing the specific locus (I did that on R).
+
+
+
+

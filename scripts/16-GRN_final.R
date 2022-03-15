@@ -119,6 +119,11 @@ regulons[(!extended)] #4808 tf> target interaction with high confidence
 fwrite(regulons,fp(out,"tf_target_interactions.csv"))
 regulons<-fread(fp(out,"tf_target_interactions.csv"))
 
+#%TF-target conserved
+regulonsf<-fread(fp(out,"tf_target_interactions.csv"))[!(extended)]
+regulons_old<-fread("outputs/10-SCENIC/regulons.csv")
+res_conserved<-sapply(unique(regulons_old$tf), function(t)length(intersect(regulons_old[tf==t]$gene,regulonsf[tf==t]$target))/nrow(regulons_old[tf==t]))
+res_conserved[c("EGR1","KLF2","KLF4")]
 #start build network only with tf> interact with high conf
 regf<-regulons[(!extended)]
 
