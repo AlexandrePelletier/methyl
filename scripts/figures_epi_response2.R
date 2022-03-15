@@ -90,7 +90,39 @@ round(table(Idents(hmap))/ncol(hmap)*100)
 #3B-markers ####
 #dotplot
 markers<-fread("../singlecell/ref/hematopo_markers.csv")
-markers[cell_type=="HSC"]
+fwrite(markers[order(cell_type)],fp(out,"markers_hematopo_lineage.csv"))
+
+markers[gene%in%c("CTSG","AZU1")]
+markers[gene%in%c("CTSG","AZU1")]
+
+
+markers[cell_type=="ErP"]
+
+markers<-fread("outputs/05-make_hematomap/hematomap_ctrls_sans_stressSCT_Leiden_res0.6_markers.csv.gz")
+markers[gene%in%c("CDK6","MLLT3")]
+m_of_int<-markers[score>=3][MarqueurPops!=""][order(lineage)][cell_type!="18"]
+
+
+m_anno<-fread("outputs/05-make_hematomap/markers_subpop")
+setdiff(m_anno$marker,m_of_int$gene) #"ID2"   "DUSP2"  "FOS" "CDK6"
+markers[gene%in%setdiff(m_anno$marker,m_of_int$gene)]
+m_of_int<-rbind(m_of_int,markers)
+
+m_of_int
+
+fwrite(,fp(out,"markers_clusters_subpop.csv"))
+
+m_lin<-fread("outputs/05-make_hematomap/markers_lineage_annotated.csv.gz")
+m_lin
+
+
+m_of_int<-rbind(m_lin[cluster!="18"][order(-score,p_val_adj)][,.SD[1:5],by="cluster"][,topspe:=T],m_lin[cluster!="18"][order(-score,p_val_adj)][MarqueurPops!=""][,.SD[1:5],by="cluster"][,topanno:=T],fill=T)[order(cluster)]
+m_of_int<-unique(m_of_int[,topspe:=gene%in%gene[topspe==T],by="cluster"][,topanno:=gene%in%gene[topanno==T],by="cluster"])
+m_of_int<-m_of_int[!is.na(gene)]
+m_of_int[,MarqueurPops:=str_replace_all(MarqueurPops,";","|")]
+fwrite(m_of_int,fp(out,"3B-markers_lineage.csv"))
+
+
 DefaultAssay(hmap)<-"SCT"
 key_genes_lin<-c("ID1","DUSP2", #LT-HSC
            "AVP","FOS", #HSC
@@ -107,6 +139,10 @@ key_genes_lin<-c("ID1","DUSP2", #LT-HSC
 DotPlot(hmap,features = key_genes_lin,
         group.by = "lineage",cols = c("white","black"))
 ggsave(fp(out,"3B-dotplot_markers.pdf"))
+DimPlot(hmap,group.by = "cell_type",label=T)
+
+FeaturePlot(hmap,c("IGLL1"))
+
 
 #featureplot
 ps<-FeaturePlot(hmap,
@@ -151,6 +187,7 @@ Heatmap(t(scale(t(avg_expr[m_hto$gene,]))),
                    
 dev.off()
 
+
 #all cbps
 avg_expr<-AverageExpression(cbps,group.by = "sample_hto",assays = "SCT",slot = "data")$SCT
 
@@ -165,6 +202,61 @@ m<-data.table(m,keep.rownames = "gene")
 m[avg_log2FC>0]#IER, KLF,NFKBIA
 head(m[avg_log2FC<0],100)
 m[gene%in%c("SOCS3","HES1","EGR1","STAT3")]
+
+#pca
+avg_expr<-AverageExpression(cbps,group.by = "sample_hto",assays = "SCT",slot = "data")$SCT
+pca_expr<-prcomp(t(avg_expr))
+
+mtd<-data.table(cbps@meta.data)
+
+mtd[,seq_depth:=sum(nCount_RNA),by="sample_hto"]
+vars_of_int<-c("group","hto","group_hto","sex","batch","seq_depth")
+res_pc_mtd<-merge(data.table(pca_expr$x,keep.rownames = "sample_hto"),
+                  unique(mtd,by="sample_hto"))
+
+p1<-ggplot(res_pc_mtd)+geom_point(aes(x=PC1,y=PC2,col=group))+
+  theme_classic()
+p2<-ggplot(res_pc_mtd)+geom_point(aes(x=PC1,y=PC2,col=hto))+
+  scale_color_manual(values = c("grey","black"))+
+  theme_classic()
+
+p1+p2+plot_layout(guides = "collect")
+ggsave(fp(out,"3D-pcplot_hto_effect.pdf"))
+
+
+res_pc_mtd2<-merge(melt(data.table(pca_expr$x,keep.rownames = "sample_hto"),id.vars = "sample_hto",variable.name = "PC",value.name = "coordinate"),
+                  unique(mtd,by="sample_hto"))
+
+res_ps_pcs<-Reduce(rbind,lapply(paste0("PC",1:10),function(pc){
+  pc_vals<-res_pc_mtd2[PC==pc]$coordinate
+  vars_list<-res_pc_mtd2[PC==pc][,.SD,.SDcols=vars_of_int]
+  pvals<-sapply(vars_list,function(var)anova(lm(pc_vals~var))$`Pr(>F)`[1])
+  r2s<-sapply(vars_list,function(var)summary(lm(pc_vals~var))$r.squared)
+  res<-data.table(PC=pc,var=vars_of_int,pval=pvals,r2=r2s)
+  return(res)
+  }))
+
+res_hto_group_pcs<-Reduce(rbind,lapply(paste0("PC",1:10),function(pc){
+  pc_vals<-res_pc_mtd2[PC==pc]$coordinate
+  pval<-anova(lm(pc_vals~res_pc_mtd2[PC==pc]$group:res_pc_mtd2[PC==pc]$hto))$`Pr(>F)`[1]
+  r2<-summary(lm(pc_vals~res_pc_mtd2[PC==pc]$group:res_pc_mtd2[PC==pc]$hto))$r.squared
+  res<-data.table(PC=pc,var="group:hto",pval=pval,r2=r2)
+  return(res)
+  }))
+res_ps_pcs<-rbind(res_ps_pcs,res_hto_group_pcs)
+
+res_ps_pcs[,pct.pc:=pctPC(pca_expr)[as.numeric(str_extract(PC,"[0-9]+"))]]
+res_ps_pcs[,PCpct:=paste0(PC," (",round(pct.pc*100,1),"%)")]
+
+ggplot(res_ps_pcs[var!="group_hto"])+
+  geom_point(aes(x=PCpct,y=var,col=-log10(pval),size=r2))+
+  scale_color_gradient2(low = "grey",mid = "red",high = "darkred",midpoint = 5)+
+  scale_x_discrete(limits=unique(res_ps_pcs[order(-pct.pc)]$PCpct))+
+  theme_minimal()
+ggsave(fp(out,"3D-dotplot_hto_effect.pdf"))
+
+
+res_ps_pcs[var%in%c("group_hto","group:hto")&PC=="PC1"]
 
 #3D-MA plot HTO####
 res_hto_dup<-fread("outputs/08-HTO_signature/res_pseudobulk_DESeq2_3replicates.csv")
@@ -244,7 +336,25 @@ ggplot(res_red[top.term.cluster==T&p.adjust<0.05&sens=="up"],
 
 ggsave(fp(out,"3E-dotplot_gsea_HTO_GO_BP_non_redundant_terms_padj0.05_up_only.pdf"),height=8)
 fwrite(res_red[top.term.cluster==T&top10clus==T&p.adjust<0.05],fp(out,"3E-top_terms_clusters.csv"))
-  
+fwrite(res_gsea_go_dt[NES>0][p.adjust<0.05],fp(out,'3E-res_hto_up_gsea_go_padj0.05.csv'))
+
+#kegg
+library(clusterProfiler)
+library(enrichplot)
+res_gsea_kegg<-readRDS("outputs/08-HTO_signature/res_gsea_kegg.rds")
+
+res_gsea_kegg_up<-res_gsea_kegg
+res_gsea_kegg_up@result<-subset(res_gsea_kegg@result,NES>0)
+pdf(fp(out,"3E-emapplot_gsea_kegg_up_top50.pdf"),width = 10,height = 6)
+emapplot(pairwise_termsim(res_gsea_kegg_up),
+         showCategory = 50,
+         cex_label_category=0.66)
+dev.off()
+
+res_gsea_kegg_dt<-fread("outputs/08-HTO_signature/res_gsea_kegg.csv.gz")
+
+fwrite(res_gsea_kegg_dt[NES>0][order(pvalue)][1:50],fp(out,'3E-res_hto_up_gsea_kegg_top50.csv'))
+
 
 # enrichgo
 
@@ -604,6 +714,7 @@ unique(res_merge,by="p.down")
 #4D-MAP plot meth expr ####
 quants<-quantile(res_mg$gene_score_add,1:100/100)
 res_mg[,gs_percentile:=sum(gene_score_add>=quants),by="gene"]
+res_hsc_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")[lineage=="HSC"]
 res_meth_expr<-merge(res_mg,res_hsc_dn,by="gene")
 
 ggplot(res_meth_expr,aes(y=log2FoldChange*-log10(padj.y),x=gs_percentile,col=padj.y<0.05&abs(log2FoldChange)>0.5))+
@@ -660,12 +771,14 @@ library(org.Hs.eg.db)
 #   return(res_enr[p.adjust<0.05]$Description)
 #   })
 }
-renv::install("ggvenn")
-library(ggvenn)
 
 #emaplot meth expr
 
-meth<-fread("outputs/03-pathway_analysis/res_gsea_go.csv")[p.adjust<0.05]
+meth<-fread("outputs/03-pathway_analysis/res_gsea_go_bp_all.csv")[p.adjust<0.05]
+
+meth[,mlog10padj.meth:=-log10(p.adjust)]
+meth[mlog10padj.meth>10,mlog10padj.meth:=10]
+
 hsc_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_gsea_go_bp.csv.gz")
 hsc_dn<-hsc_dn[order(pvalue)][1:50]
 meth_dn<-merge(hsc_dn,meth,all.x=T,by=c("ID","Description"),suffixes = c("",".meth"))
@@ -674,31 +787,35 @@ res_hsc_dn<-readRDS("outputs/09-LGA_vs_Ctrl_Activated/res_gsea_go_bp.rds")
 
 res_hsc_dnm<-res_hsc_dn
 res_hsc_dnm@result<-data.frame(meth_dn,row.names = "ID")
-head(res_hsc_dnm@result)
 res_hsc_dnm@result$ID<-rownames(res_hsc_dnm@result)
+
 pdf(fp(out,"4E-emapplot_overlap_methyl_on_expr_go_bp_top50.pdf"),width = 10,height = 6)
 emapplot(pairwise_termsim(res_hsc_dnm),
-         color="p.adjust.meth",
+         color="mlog10padj.meth",
          showCategory = 50,
-         cex_label_category=0.66)
+         cex_label_category=0.66)+
+  scale_color_gradient2(low = "grey",mid = "red",high = "darkred",midpoint = 5,limits=c(-log10(0.05),10))
 dev.off()
 
 
 #venn
+#renv::install("ggvenn")
+library(ggvenn)
+
 pathways_list<-list(
-  meth=fread("outputs/03-pathway_analysis/res_gsea_go.csv")[p.adjust<0.001]$Description,
+  meth=fread("outputs/03-pathway_analysis/res_gsea_go_bp_all.csv")[p.adjust<0.001]$Description,
   hsc_lga=fread("outputs/09-LGA_vs_Ctrl_Activated/res_gsea_go_bp.csv.gz")[p.adjust<0.05]$Description,
   hto=fread("outputs/08-HTO_signature/res_gsea_go_bp.csv.gz")[p.adjust<0.05]$Description
   )
 lapply(pathways_list, length)
 # $meth
-# [1] 637
+# [1] 715/ 6059
 # 
-# $hsc_dn
-# [1] 42
+# $hsc_lga
+# [1] 46 / 4999
 # 
-# $hto_up
-# [1] 68
+# $hto
+# [1] 90 / 5173
 
 ggvenn(
   pathways_list, 
@@ -713,19 +830,20 @@ ggvenn(
   fill_color = c("grey","darkgreen"),
   stroke_size = 0.5, set_name_size = 4,show_percentage = F
   )
-ggsave(fp(out,"4E-pathways_overlap_without_hto_GO.pdf"))
-cat(ps(Reduce(intersect,pathways_list),collapse = "\n"))
-
-
-setdiff(intersect(pathways_list$meth,pathways_list$hsc_lga),
-        pathways_list$hto)
-# [1] "negative regulation of growth"                         
-# [2] "regulation of cell growth"                             
-# [3] "signal transduction by p53 class mediator"             
-# [4] "regulation of protein serine/threonine kinase activity"
-# [5] "regulation of body fluid levels"                       
-# [6] "cellular response to chemical stress"                  
-# [7] "hemostasis"
+10/46#22%
+phyper(q = 10-1,m = 715,n = 6059-715,k = 46,lower.tail = F)
+ggsave(fp(out,"4E-pathways_overlap_meth_expr.pdf"))
+cat(paste0(Reduce(intersect,pathways_list[1:2]),collapse = "\n"))
+# regulation of growth
+# regulation of cell growth
+# negative regulation of growth
+# regulation of mitotic cell cycle
+# regulation of protein serine/threonine kinase activity
+# signal transduction by p53 class mediator
+# regulation of body fluid levels
+# cellular response to chemical stress
+# regulation of DNA-binding transcription factor activity
+# negative regulation of apoptotic signaling pathway
 
 
 #DotPlot methylation pathway
@@ -780,12 +898,13 @@ ggsave(fp(out,"4E-doplot_compa_methylation_expression_enrichment_go_bp_hsc_lga_.
 #SOME EXAMPLE OF KEY GENES FROM CONSERVED PATHWAYS
 
 res_go_hsc_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_go_bp_dn.csv.gz")
-res_go_meth<-fread("outputs/03-pathway_analysis/res_gsea_go.csv")
+res_go_meth<-fread("outputs/03-pathway_analysis/res_gsea_go_bp_all.csv")
 path_comm
 path_int<-c("negative regulation of growth",
             "negative regulation of cell growth",
-            "myeloid cell differentiation",
-            "regulation of protein stability")
+            "regulation of growth",
+            "regulation of mitotic cell cycle",
+            "cellular response to chemical stress")
 genes_dn_bp<-res_go_hsc_dn[Description%in%path_int,tr(geneID,tradEntrezInSymbol = T),by="Description"]
 colnames(genes_dn_bp)<-c("desc","gene")
 
@@ -811,7 +930,7 @@ res_mg<-unique(res_meth[order(-gene_score_add,-cpg_score)],by="gene")
 plot(density(res_mg$gene_score_add))
 abline(v = 300)
 res_mg[gene_score_add>300]
-genes_meth_bpg<-merge(genes_meth_bp,res_mg[n.dmcs>0|gene_score_add>300])
+genes_meth_bpg<-merge(genes_meth_bp,res_mg[n.dmcs>0|gene_score_add>500])
 
 genes_bp<-rbind(genes_dn_bp[,alter:="dn"],genes_meth_bpg[,.(desc,gene)][,alter:="meth"])
 genes_bp[,n_bp:=.N,by=.(gene,alter)]
@@ -820,21 +939,23 @@ genes_bp[n_alter==2]
 genes_bp[,level_alter:=ifelse(.N==2,"both",alter),.(gene,desc)]
 genes_bp[,level_alter:=factor(level_alter,levels = c("meth","dn","both"))]
 
-gene_bp_matf<-dcast(genes_bpf,desc~gene,value.var = "level_alter",fun.aggregate = function(x)ifelse(is.null(x),0,x))
+gene_bp_matf<-dcast(genes_bp,desc~gene,value.var = "level_alter",fun.aggregate = function(x)ifelse(is.null(x),0,x))
 gene_bp_matf<-as.matrix(data.frame(gene_bp_matf,row.names = "desc"))
 gene_bp_matf[is.na(gene_bp_matf)]<-0
 pdf(fp(out,"4D-heatmap_genes_common_bp_of_int_expr_meth.pdf"),width = 12,height = 2)
 pheatmap::pheatmap(gene_bp_matf,color = c("white","purple","orange","red"),cluster_rows = T,cluster_cols = T,fontsize_col =  4,fontsize_row = 6)
 dev.off()
 
-#focus on negative regulation of cell growth
+#focus of regulation of growth
 #plot meth / expr of this bp
 quants<-quantile(res_mg$gene_score_add,1:100/100)
 res_mg[,gs_percentile:=sum(gene_score_add>=quants),by="gene"]
 res_meth_expr<-merge(res_mg,res_hsc_dn,by="gene")
-genes_neg_growth<-FindGOGenes("negative regulation of cell growth")
-res_me_ng<-res_meth_expr[gene%in%genes_neg_growth$hgnc_symbol]
-
+reg_growth_modul<-c("regulation of growth","regulation of cell growth","negative regulation of growth","negative regulation of cell growth")
+genes_reg_growth<-FindGOGenes(reg_growth_modul)
+genes_reg_growth#270
+res_me_ng<-res_meth_expr[gene%in%genes_reg_growth$hgnc_symbol]
+res_me_ng#153
 ggplot(res_me_ng,aes(y=log2FoldChange*-log10(padj.y),x=gs_percentile,col=padj.y<0.05&abs(log2FoldChange)>0.5))+
   geom_point()+
   geom_label_repel(aes(label=ifelse(padj.y<0.05&abs(log2FoldChange)>0.5,gene,"")),
@@ -843,61 +964,8 @@ ggplot(res_me_ng,aes(y=log2FoldChange*-log10(padj.y),x=gs_percentile,col=padj.y<
   scale_color_manual(values = c("grey","red")) +
   theme_minimal() +
   theme(legend.position = "bottom")
-ggsave(fp(out,"4E-plot_expr_and_meth_change_neg_regul_cell_growth_genes.pdf"))
-#most epigen altered genes of this bp
-genes_of_int<-unique(genes_bp[desc=="negative regulation of cell growth"&level_alter=="both"]$gene)
-genes_of_int#"SESN2"   "SEMA4A"  "SIRT1"   "SEMA7A"  "SERTAD3"
+ggsave(fp(out,"4E-plot_expr_and_meth_change_genes_of_regul_growth_modul.pdf"))
 
-res_mg[gene%in%genes_of_int][order(-gene_score_add)]
-res_mg[gene_score_add>=500]
-res_meth[gene=="SESN2"][order(pval)][pval<0.01]
-res_meth[in_eQTR==T&gene=="SESN2",tss_dist:=tss_dist-326501]
-res_meth[gene=="SESN2"][order(pval)][pval<0.01]
-res_meth[cpg_id==52791]
-res_meth[gene=="SIRT1"][order(pval)][pval<0.01]
-res_meth[gene=="SEMA7A"][order(pval)][pval<0.01]
-
-ggplot(unique(res_meth[gene%in%c("SESN2","SIRT1","SEMA7A")&pval<0.01][order(gene_score_add,pval,-in_eQTR)],by=c("gene","cpg_id"))[order(gene_score_add,tss_dist)],
-       by=c("gene","cpg_id"),)+
-  geom_col(aes(x=factor(tss_dist),y=meth.change,fill=-log10(pval),col=in_eQTR))+
-  facet_wrap("gene",scales = "free_x")+scale_fill_gradient(low = "white",high = "black",limits=c(2,3))+
-ggsave(fp(out,"4E-barplot_meth_change_cpg_top_meth_genes_neg_regul_cell_growth.pdf"))
-res_meth[gene=="HSPA1B"][order(pval)][pval<0.01]
-
-go_ids<-lapply(path_comm,FindGO_ID) #GO:0030308
-genes_bp<-lapply(go_ids,FindGOGenes)
-genes_bp<-unique(genes_bp[go_id=="GO:0030308"]$hgnc_symbol)
-
-#negative regulation of growth
-
-res_hsc_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")[lineage=="HSC"]
-res_meth<-fread("outputs/02-gene_score_calculation_and_validation/res_anno.csv.gz")
-res_meth[,n.dmcs:=sum(pval<0.001&abs(meth.change)>25),by="gene"]
-res_mg<-unique(res_meth[order(-gene_score_add,cpg_score)],by="gene")
-res_mg[,gs_scaled:=scale(gene_score_add)]
-res_merge<-merge(res_hsc_dn,res_mg,by="gene")
-res_merge[,bp_of_int:=gene%in%genes_bp]
-
-res_merge[,avg.dmcs:=mean(n.dmcs),by="bp_of_int"]
-
-ggplot(res_merge)+geom_boxplot(aes(fill=avg.dmcs,y=gs_scaled,x=bp_of_int),outlier.shape = NA)+coord_cartesian(ylim = c(-1,3))
-
-ggplot(res_merge)+geom_boxplot(aes(y=-log10(padj.x)*abs(log2FoldChange),x=bp_of_int),outlier.shape = NA)+coord_cartesian(ylim = c(0,0.5))
-
-
-
-res_merge_bp<-res_merge[gene%in%genes_bp]
-ggplot(res_merge_bp)+geom_point(aes(x=log2FoldChange,y=-log10(padj.x),size=n.dmcs,col=gs_scaled))
-
-ggplot(res_merge_bp)+geom_point(aes(x=log2FoldChange*-log10(padj.x),y=gs_scaled,size=n.dmcs,col=padj.x<0.05&abs(log2FoldChange)>0.5))
-
-ggplot(res_merge_bp[padj.x<0.05|n.dmcs>0])+geom_point(aes(x=gene,y=gs_scaled,size=n.dmcs,col=log2FoldChange))
-
-#4E-genes negative regul cell growth
-neg_cell_growth_genes<-c("SIRT1", "SESN2", "CDKN1A") 
-res_meth_int<-res_meth[gene%in%neg_cell_growth_genes]
-res_meth_int[pval<0.01]
-unique(res_meth_int[order(-gene_score_add,pval)],by="gene")
 
 # [test]-DEGs/DMGs overlap+ pathway enrichment
 # res_meth<-fread("outputs/02-gene_score_calculation_and_validation/res_anno.csv.gz")
@@ -937,6 +1005,50 @@ unique(res_meth_int[order(-gene_score_add,pval)],by="gene")
 # res_enr[p.adjust<0.1]
 
 #5 : Regulons####
+#5A-TF motif enricment in DMCS (homer)
+res<-fread("outputs/03B-motif_analysis/knownResults.txt",
+           select = c(1,2,3,5,6,7,8,9),
+           col.names = c("motif","consensus","pval","padj","n_dmc_with_motif","pct_dmc_with_motif","n_background_with_motif","pct_background_with_motif"))
+res[padj<0.05]
+res[,pct_dmc_with_motif:=as.numeric(str_remove(pct_dmc_with_motif,"%"))]
+res[,pct_background_with_motif:=as.numeric(str_remove(pct_background_with_motif,"%"))]
+res[,motif:=str_remove(motif,"/Homer")]
+res[,fold.enrichment:=pct_dmc_with_motif/pct_background_with_motif]
+
+res_perm<-fread("outputs/03B-motif_analysis/res_known_motif_all_perm_bgrandom.csv")
+res_perm[,motif:=str_remove(motif,"/Homer")]
+
+res[,permut:=0]
+res_perm_merge<-merge(res,res_perm,all=T)
+res_perm_merge[,p.perm:=sum(pct_dmc_with_motif[permut==0]<=pct_dmc_with_motif[permut!=0])/sum(permut!=0,na.rm = T),by=.(motif)]
+
+res_perm_merge[padj<=0.05&n_dmc_with_motif>30&p.perm<0.05&permut==0]
+res_perm_<-res_perm_merge[permut==0]
+
+res_perm_[padj<=0.05] #26
+res_perm_[padj<=0.05&n_dmc_with_motif>30] #26
+res_perm_[padj<=0.05&n_dmc_with_motif>30&p.perm<0.01] #26
+
+ggplot(res_perm_[padj<=0.05&pct_dmc_with_motif>1&p.perm<0.01])+
+  geom_point(aes(x=motif,col=-log10(pval),size=fold.enrichment,y=n_dmc_with_motif))+
+  scale_color_gradient(high ="brown1" ,low = scales::muted("red"))+
+  scale_x_discrete(limits=res_perm_[padj<=0.05&pct_dmc_with_motif>1&p.perm<0.01][order(pval)]$motif)+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 80, hjust=1))
+
+
+res_perm_[,motif.name:=sapply(motif,function(x)strsplit(x,"/")[[1]][1])]
+ggplot(res_perm_[padj<=0.05&p.perm<0.01&fold.enrichment>1.30][order(pval)])+
+  geom_point(aes(x=motif.name,y=-log10(pval),col=fold.enrichment,size=n_dmc_with_motif))+
+  scale_x_discrete(limits=res_perm_[padj<=0.05&p.perm<0.01&fold.enrichment>1.30][order(pval)]$motif.name)+
+  scale_color_gradient2(low = "white",mid = "grey",high = "black",midpoint = 1.25,limits=c(1,2.1))+
+  scale_y_continuous(limits = c(0,25))+
+  theme_bw()+
+  theme(axis.text.x = element_text(angle = 80, hjust=1))
+
+ggsave(fp(out,"5A-motif_enrichment_homer_own_background_no_norm_padj0.05_p.perm0.01_fold.enrichment1.3.pdf"))
+
+setdiff(res_perm_[padj<=0.05&p.perm<0.01]$motif,res_perm_[padj<=0.05&pct_dmc_with_motif>1&p.perm<0.01]$motif)
 #n_regulons
 regulons_list<-readRDS("../singlecell/outputs/05-SCENIC/cbps0-8_clean/regulons_list.rds")
 length(regulons_list)#250
@@ -952,9 +1064,10 @@ res_tf_sig<-res_tf_diff[p_val_adj<0.001&abs(avg_diff)>0.03&lineage=="HSC"&hto==T
 
 fwrite(res_tf_sig,fp(out,"5B-res_tf_activity_alteration_lga_hto_hsc_padj0.001_avg_diff0.3.csv"))
 
-ggplot(res_hsc_htof)+
+ggplot(res_tf_sig)+
   geom_col(aes(x=regulon,y=avg_diff,fill=-log10(p_val_adj)))+
- scale_x_discrete(limits = res_hsc_htof[order(p_val_adj)]$regulon)
+ scale_x_discrete(limits = res_tf_sig[order(p_val_adj)]$regulon)+
+  scale_fill_gradient(low="white",high="black",limits=c(10,60))
 
 ggsave(fp(out,"5B-barplot_tf_change_hsc_lga_vs_ctrl_hto.pdf"))
 
@@ -1043,45 +1156,16 @@ Heatmap(t(enrich_mat[,res_tf_sig$regulon]),
                 column_names_gp = grid::gpar(fontsize = 8),
                 cluster_rows = T,
                 cluster_columns=T,
-                name="-log10(djusted p-value)",
+                name="-log10(adjusted p-value)",
                 row_title = "Regulon",
                 column_title = "Gene sets")
 dev.off()
 
 
-#XX-degs dn pathways ####
-degs<-fread("outputs/08-HTO_signature/by_lineage/res_pseudobulk_DESeq2_3replicates.csv.gz")
-degs<-degs[padj<0.05&abs(log2FoldChange)>0.5]
-table(degs$lineage)
-degs[,ndegs:=.N,by="lineage"]
-degs_pro<-degs[ndegs>60& lineage!="DC"]
-degs_pro[,common_degs:=.N==5,by="gene"]
-unique(degs_pro[common_degs==T]$gene)
 
-res_kegg_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_kegg_dn.csv")
-res_kegg_dn<-res_kegg_dn[p.adjust<0.05]
-
-res_go_dn<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_go_bp_dn.csv.gz")
-res_go_dn[order(p.adjust)][p.adjust<0.05]$Description
-res_go_dn<-res_go_dn[p.adjust<0.05]
-terms_of_int<-rbind(res_go_dn[,source:="GO:BP"],res_kegg_dn[,source:="KEGG"])
-
-terms_of_int[,intersection_size:=Count]
-terms_of_int[,GeneRatio:=as.numeric(str_extract(GeneRatio,"[0-9]+"))/as.numeric(str_extract(GeneRatio,"[0-9]+$"))]
-
-terms_of_int[,top20:=rank(p.adjust)<=20,by="source"]
-terms_of_int$Description <- reorder(terms_of_int$Description, terms_of_int$p.adjust)
-ggplot(terms_of_int[top20==T])+
-  geom_point(aes(x=Description,y=-log10(p.adjust),size=Count,col=GeneRatio))+
-  scale_x_discrete(guide = guide_axis(angle = 80))+facet_grid(~source,scales = "free",space = "free")
-
-ggsave(fp(out,"dotplot_go_kegg_enrichment_HSC_LGA_down_top20_padj0.05.pdf"),width = 12,height = 8)
-
-
-
-#figure ATAC
+#figure 6####
 #
-#a) figure UMAP predicted id####
+#6A : figure UMAP lineage####
 library(Seurat)
 library(Signac)
 inp<-"outputs/14-DMCs_atac_integr/"
@@ -1089,34 +1173,97 @@ atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atacs.rds")
 atacs[["lin_peaks"]]<-readRDS("outputs/14-DMCs_atac_integr/cbps_lin_spe_peaks_assay.rds")
 
 DimPlot(atacs, group.by = "predicted.id", label = TRUE,reduction = "humap")
-ggsave(fp(out,"Aa-cbps_atac_umap_predicted_lineage.pdf"))
+DimPlot(subset(atacs,predicted.id=="MPP/LMPP"&prediction.score.max<0.55,invert=T), group.by = "predicted.id", label = FALSE,reduction = "humap")
+
+DimPlot(atacs, group.by = "seurat_clusters", label = TRUE,reduction = "humap")
+mtd<-data.table(atacs@meta.data,keep.rownames = "bc")
+mtd_pr<-melt(mtd,id.vars = c("bc","seurat_clusters"),value.name = "prediction.score",variable.name = "lineage",
+             measure.vars = colnames(mtd)[str_detect(colnames(mtd),"prediction.score")])
+
+mtd_pr[,lineage:=str_remove(lineage,"prediction.score.")]
+mtd_pr<-mtd_pr[lineage!="max"]
+ggplot(mtd_pr)+geom_boxplot(aes(y=prediction.score,x=seurat_clusters))+
+facet_wrap("lineage")
+head(atacs[[]])
+
+VlnPlot(atacs,features = "prediction.score.max",group.by = "predicted.id",pt.size = 0)
+
+DefaultAssay(atacs)<-"ATAC"
+atacs <- FindClusters(object = atacs, verbose = FALSE, algorithm = 3,resolution = 0.8 )
+DimPlot(object = atacs, reduction = "humap",label = TRUE) + NoLegend()
+ggplot(mtd)+geom_bar(aes(x=seurat_clusters,fill=predicted.id),position = 'fill')
+
+Idents(atacs)<-"seurat_clusters"
+
+new.id<-c("MPP/LMPP",
+  "HSC",
+  "HSC",
+  "MPP/LMPP",
+  "MPP/LMPP",
+  "Myeloid",
+  "Erythro-Mas",
+  "Erythro-Mas",
+  "MPP/LMPP",
+  "Lymphoid",
+  "MPP/LMPP",
+  "18",
+  "Lymphoid",
+  "B cell",
+  "DC",
+  "T cell")
+names(new.id)<-levels(atacs)
+atacs<-RenameIdents(atacs,new.id)
+atacs[["clusters_anno"]]<-Idents(atacs)
+atacs<-subset(atacs,seurat_clusters!="11")
+DimPlot(atacs, group.by =c("seurat_clusters","predicted.id") ,label = TRUE,reduction = "humap",pt.size = 0.2,label.size = 3)
+
+ggsave(fp(out,"6A-cbps_atac_umaps.pdf"))
+
+DimPlot(atacs, group.by = "dataset", label = TRUE,reduction = "humap")
+
+#n peaks spe by lin
+
+res_peaks<-fread("outputs/14-DMCs_atac_integr/peaks_markers_lineage.csv.gz")
+res_peaks[p_val_adj<0.001]
+
+progens<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+res_peaksf<-res_peaks[cluster%in%progens]
+res_peaksf[,lineage:=factor(cluster,levels =progens )]
+table(res_peaksf[p_val_adj<0.001]$lineage)
+    # LT-HSC         HSC    MPP/LMPP     Myeloid    Lymphoid Erythro-Mas 
+    #       2         465           1         359         622        1932 
+ggplot(res_peaksf[p_val_adj<0.001])+geom_bar(aes(x=lineage,fill=lineage))
+ggsave(fp(out,"6Asupp_barplot_n_peak_spe_by_lineage_padj0.001.pdf"))
+fwrite(res_peaksf[p_val_adj<0.001],"outputs/6Asupp-res_peak_spe_by_lineage_padj0.001.csv.gz")
 
 
-#b) Lineage spe TF####
+#6B-Lineage spe TF####
 res_motif_lin<-fread(fp(inp,"enriched_motifs_by_lineage_specific_peaks.csv"))
-#rm redundant motif
-res_motif_lin[,top15:=rank(pvalue)<=15,by="lineage"]
-res_motif_lin[,pvalue:=pvalue+10^-316]
+resf<-res_motif_lin[pvalue<10^-50&lineage!="MPP/LMPP"]
+
+resf[,motif.name:=factor(motif.name,levels=unique(motif.name[order(pvalue)]))]
 
 res_motif_lin[,]
-ggplot(res_motif_lin[pvalue<10^-50&lineage!="MPP/LMPP"])+
-  geom_point(aes(x=motif.name,size=fold.enrichment,col=-log10(pvalue),y=percent.observed))+
-  facet_grid(~lineage,scales = "free_x",space="free_x")+
-  scale_color_gradient2(low = "grey",mid = "red",high = "darkred",limits=c(1,317),midpoint = 150)+
-  scale_y_continuous(limits=c(0,100),expand = c(0,0))+scale_x_discrete(guide = guide_axis(angle = 60))+
+ggplot(resf)+
+  geom_point(aes(x=motif.name,col=fold.enrichment,y=-log10(pvalue),size=observed))+
+  facet_grid(~lineage,scales = "free",space="free_x")+
+  scale_color_gradient2(low = "grey",mid = "red",high = "darkred")+
+  scale_y_continuous()+scale_x_discrete(guide = guide_axis(angle = 60))+
   theme(axis.text=element_text(size=8))
-ggsave(fp(out,"Ab-lineage_spe_tf_mlog10pval50.pdf"))
 
-ggplot(res_motif_lin[pvalue<10^-50&lineage!="MPP/LMPP"])+
-  geom_point(aes(x=motif.name,size=fold.enrichment,col=-log10(pvalue),y=percent.observed))+
-  facet_wrap("lineage",scales = "free_x",ncol = 2)+
-  scale_color_gradient2(low = "grey",mid = "red",high = "darkred",limits=c(1,317),midpoint = 150)+
-  scale_y_continuous(limits=c(0,100),expand = c(0,0))+scale_x_discrete(guide = guide_axis(angle = 60))+
-  theme(axis.text=element_text(size=8))
-ggsave(fp(out,"Ab-lineage_spe_tf_mlog10pval50_v2.pdf"))
-fwrite(res_motif_lin,fp(out,"enriched_motifs_by_lineage_specific_peaks.csv"))
+ps<-lapply(unique(resf$lineage),function(lin)ggplot(resf[lineage==lin])+
+  geom_point(aes(x=motif.name,col=fold.enrichment,y=-log10(pvalue),size=observed))+
+  scale_color_gradient2(low = "white",mid = "darkgrey",high = "black",midpoint = 2,limits=c(1,8))+
+  scale_y_continuous(expand = c(0.2,0.2))+
+    scale_x_discrete(guide = guide_axis(angle = 60))+
+    scale_size_continuous(limits = c(100,1200))+
+  theme(axis.text=element_text(size=8))+ggtitle(lin))
 
-#c) DMCs enrichment in HSC peaks####
+wrap_plots(ps)+plot_layout(guides = 'collect')
+ggsave(fp(out,"6B-lineage_spe_tf_mlog10pval50.pdf"),height = 8)
+
+
+# DMCs enrichment in HSC peaks####
 res_dmcs_peaks_enr<-fread(fp(inp,"res_dmcs_peaks_enrichment_for_lineage_specific_peaks.csv"))
 res_dmcs_peaks_enr[,percent.observed:=precision*100]
 ggplot(res_dmcs_peaks_enr)+
@@ -1125,10 +1272,10 @@ ggplot(res_dmcs_peaks_enr)+
     scale_y_continuous(expand = c(0,1))+scale_x_discrete(guide = guide_axis(angle = 0))+
     theme(axis.title.x =element_blank())
 
-ggsave(fp(out,"Ac-dmcs_enrichment_in_lineage_spe_peaks.pdf"))
+ggsave(fp(out,"6C-dmcs_enrichment_in_lineage_spe_peaks.pdf"))
 
 
-#d) TF DMCs HSC peaks vs CpG peaks####
+# TF DMCs HSC peaks vs CpG peaks####
 res_motif_hsc_dmcs<-fread(fp(inp,"res_tf_motif_enrichment_in_DMCs_containing_vs_CpGs_containing_hsc_peaks.csv"))
 res_motif_hsc_dmcs[,pvalue:=pvalue+10^-316]
 ggplot(res_motif_hsc_dmcs[1:15])+
@@ -1142,7 +1289,7 @@ ggplot(res_motif_hsc_dmcs[1:15])+
 ggsave(fp(out,"Ad-dotplot_tf_motif_dmcs_vs_cpg_hsc_peaks_top15.pdf"))
 
 
-#e)valid trs alteration méca####
+#6C: valid trs alteration méca####
 res_or_degs_dmcs_tf<-fread(fp(inp,"res_degs_enrichment_in_dmcs_tf_hsc_peaks.csv"))
 
 res_or_degs_dmcs_tf[,padj_b:=ifelse(padj<0.001,"***",ifelse(padj<0.01,"**",ifelse(padj<0.05,'*','ns')))]
@@ -1157,9 +1304,34 @@ ggplot(res_or_degs_dmcs_tf)+geom_col(aes(y=log2(fold.enrichment),x=candidat_peak
   theme(axis.text.x = element_text(size = 8))
 ggsave(fp(out,"Ae-barplot_dmcs_tf_peaks_enrichment_in_degs_peaks.pdf"))
 
-#f) diff accessibility lga vs ctrl HSC####
+#6D diff accessibility lga vs ctrl HSC####
 inp<-"outputs/15-chromatin_change_LGA_vs_Ctrl/"
 #volcano
+res_da<-fread("outputs/15-chromatin_change_LGA_vs_Ctrl/differential_peaks_accessibility_lga_vs_ctrl_hsc_logFC0.csv.gz")
+res_da_xy<-res_da[!str_detect(peak,"X|Y")]
+peak_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peak_anno[,peak:=query_region]
+res_da_xy_anno<-merge(res_da_xy,peak_anno)
+genes_of_interest<-c("LMNA","FOS","KLF13","NFKBIA","CDCA4","JUNB",'SAMD1',"GADD45B","SP3","GSK3A","WNT10A","FOXO3","E2F1",
+                     "SGK1","SENP2","KIF2","GFPT2")
+
+res_da_xy_anno[p_val_adj<0.001&avg_log2FC<(-0.25)]$gene_name
+res_da_xy_anno[p_val_adj<0.001&avg_log2FC>0.25][order(p_val_adj)]$gene_name
+
+res_da_xy_anno[,peak_gene:=paste0(peak,"(",gene_name,")")]
+ggplot(res_da_xy_anno,aes(x=avg_log2FC,y=-log10(p_val_adj),col=p_val_adj<0.001&abs(avg_log2FC)>0.25))+
+  geom_point(size=1) +
+  geom_label_repel(aes(label=ifelse(p_val_adj<0.001&abs(avg_log2FC)>0.25&gene_name%in%genes_of_interest,peak_gene,"")),
+                    label.size = NA,
+                   max.overlaps = 3000,
+                   size=2)+
+  scale_color_manual(values = c("grey","red")) +
+  scale_x_continuous(limits=c(-1,1))+
+  theme_minimal() +
+  theme(legend.position = "bottom")
+ggsave(fp(out,"6D-volcano_da_peaks_LGA_vs_Ctrl_HSC.pdf"),height = 6.6)
+fwrite(res_da_xy_anno[p_val_adj<0.001&abs(avg_log2FC)>0.25],fp(out,"6D-res_da_peaks_LGA_vs_Ctrl_padj0.001_log2FC0.25.csv"))
+
 
 #tf
 hsc_lga_tf_all<-fread(fp(inp,"motif_enrichment_in_peaks_up_and_down_lga_vs_ctrl_hsc.csv.gz"))
@@ -1174,7 +1346,8 @@ ggplot(hsc_lga_tf_all_20)+
   scale_y_continuous(limits=c(0,55),expand = c(0,0))+
   scale_x_discrete(guide = guide_axis(angle = 60))+
   theme(axis.text=element_text(size=8))
-ggsave(fp(out,"Ag-dotplot_TF_motif_enrichment_in_up_or_down_peaks_LGA_vs_Ctrl_HSC.pdf"))
+ggsave(fp(out,"6D-dotplot_TF_motif_enrichment_in_up_or_down_peaks_LGA_vs_Ctrl_HSC_top20.pdf"))
+fwrite(hsc_lga_tf_all[pvalue<10^-6],fp(out,"6D-res_TF_motif_enrichment_in_up_or_down_peaks_LGA_vs_Ctrl_HSC_pval10m6.csv"))
 
 #DMCs / DEGs enrichment
 res_or_da_peaks_dmcs_degs<-fread(fp(inp,"res_da_peaks_enrichment_in_dmcs_degs_hsc_peaks.csv"))
@@ -1191,6 +1364,412 @@ ggplot(res_or_da_peaks_dmcs_degs)+geom_col(aes(y=log2(fold.enrichment),x=candida
   scale_x_discrete(guide =guide_axis(angle = 66))+
   theme(axis.text.x = element_text(size = 8))
 ggsave(fp(out,"Ah-barplot_dmcs_degs_peaks_enrichment_in_hsc_da_peaks.pdf"))
+
+
+#6E : network final
+#genescore 500 = top cb ?
+res_m<-fread("outputs/02-gene_score_calculation_and_validation/res_genes.csv.gz")
+quantile(res_m$gene_score_add,0.8+(1:10/100))
+res_m[gene_score_add>500]
+4289/24857 #0.172
+1-0.172 #0.828
+tfstarget<-fread("outputs/16-GRN_final/egr1_KLF2_KLF4_network_tf_target_interactions.csv")
+res_mf<-res_m[gene%in%unique(union(tfstarget$target,tfstarget$tf))]
+
+setdiff(res_mf[gene_score_add>500]$gene,res_mf[gene_score_add>572]$gene)
+setdiff(res_mf[gene_score_add>quantile(gene_score_add,0.8)]$gene,res_mf[gene_score_add>500]$gene)
+
+#82% top18% 
+
+#6F : genome track JUNB, SOCS3, GADD45B, EGR1, LMNA####
+#try with JUNB 
+library(Seurat)
+library(Signac)
+inp<-"outputs/14-DMCs_atac_integr/"
+inp2<-"outputs/15-chromatin_change_LGA_vs_Ctrl/"
+
+atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atacs.rds")
+atacs[["lin_peaks"]]<-readRDS("outputs/14-DMCs_atac_integr/cbps_lin_spe_peaks_assay.rds")
+progens<-c("LT-HSC","HSC","MPP/LMPP","Lymphoid","Myeloid","Erythro-Mas")
+
+peaks_da<-fread(fp(inp2,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))
+peaks_da_anno<-ClosestFeature(atacs,peaks_da[p_val_adj<0.001&abs(avg_log2FC)>0.25]$peak)
+peaks_da_anno<-data.table(peaks_da_anno)
+peaks_da_anno[,peak:=query_region]
+peaks_da_anno<-merge(peaks_da,peaks_da_anno,by="peak")
+
+peaks_da_anno[gene_name=="JUNB"]
+
+#showing peaks accessibility in CTRL LGA, gene anno
+atacs[["group"]]<-ifelse(atacs$dataset%in%c("cbp.atac1","cbp.atac3"),"ctrl","lga")
+atacs[["lineage.group"]]<-paste(atacs$predicted.id,atacs$group,sep=".")
+
+annotations<-readRDS("../atac/ref/gene_annotations_hg38_GRanges.rds")
+Annotation(atacs) <- annotations
+
+atacs@assays$lin_peaks@motifs<-readRDS("outputs/14-DMCs_atac_integr/atacs_cbps_lin_peaks_motif_object.rds")
+atacs_hsc<-subset(atacs,predicted.id=="HSC")
+Idents(atacs_hsc)<-"group"
+DefaultAssay(atacs_hsc)<-"ATAC"
+
+cov_junb<-CoveragePlot(
+  object = atacs_hsc,
+  region = "chr19-12791128-12792822",
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_junb <- AnnotationPlot(
+  object = atacs_hsc,
+  region = "chr19-12791128-12792822"
+)
+
+peak_junb <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = "chr19-12791128-12792822"
+)
+
+tile_junb <- TilePlot(
+  object = atacs_hsc,
+  order.by = "random",
+  region = "chr19-12791128-12792822",
+  tile.cells = 100
+)
+tile_junb<-tile_junb+scale_fill_gradient(low = "white",high = "darkred",breaks=c(0,2,4,6))
+cbps_hsc<-subset(readRDS("outputs/06-integr_singlecell_cbps/cbps_sct_light.rds"),lineage_hmap=="HSC")
+Idents(cbps_hsc)<-"group"
+expr_junb <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = "JUNB",
+  assay = "SCT"
+)
+
+CombineTracks(
+  plotlist = list(cov_junb, tile_junb, peak_junb, gene_junb),
+  expression.plot = expr_junb,
+  heights = c(10, 6, 1, 3),
+  widths = c(9, 2)
+)
+
+#add MethInfo
+res_meth<-fread("outputs/14-DMCs_atac_integr/res_cpgs_hg38.cs.gz")
+res_meth_anno<-fread("outputs/02-gene_score_calculation_and_validation/res_anno.csv.gz")
+#chr19-12791128-12792822
+start.pos <- 12791128
+  end.pos <- 12792822
+  chromosome <- "chr19"
+  
+res_meth_reg<-res_meth[chr==chromosome&pos>start.pos&pos<end.pos]
+res_meth_reg[,start:=pos][,end:=pos+1]
+p<-ggplot(data = res_meth_reg) + geom_segment(aes(x = start, y = 0, 
+      xend = end, yend = logFC,col=-log10(P.Value)), size = 2, data = res_meth_reg)+
+  scale_color_gradient(low = "white",high = "black")
+
+meth_junb<-p+ theme_classic() + ylab(label = "Methylation change") + 
+    xlab(label = paste0(chromosome, " position (bp)")) + 
+    xlim(c(start.pos, end.pos))
+
+CombineTracks(
+  plotlist = list(cov_junb, meth_junb, peak_junb, gene_junb),
+  expression.plot = expr_junb,
+  heights = c(10, 6, 1, 3),
+  widths = c(9, 2)
+)
+
+#addTFMotifInfo
+start<-function(x)as.numeric(strsplit(x,"-")[[1]][2])
+end<-function(x)as.numeric(strsplit(x,"-")[[1]][3])
+seqi<-function(x)strsplit(x,"-")[[1]][1]
+peak<-"chr19-12791128-12792822"
+start.pos <- start(peak)
+end.pos <- end(peak)
+chromosome <- seqi(peak)
+
+egr1_ranges<-atacs_hsc@assays$lin_peaks@motifs@positions[[GetMotifIDs(atacs_hsc,motif.names = "EGR1")]]
+
+
+egr1_dt <- data.table(as.data.frame(egr1_ranges))
+egr1_dt_reg<-egr1_dt[seqnames==chromosome&start>start.pos&end<end.pos]
+
+p<-ggplot(data = egr1_dt_reg) + geom_segment(aes(x = start, y = 0, 
+      xend = end, yend = 0),col="black", size = 2, data = egr1_dt_reg)
+
+egr1_junb<-p+ theme_classic() + ylab(label = "EGR1") + 
+      theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+    xlab(label = paste0(chromosome, " position (bp)")) + 
+    xlim(c(start.pos, end.pos))
+
+
+tf<-"KLF4"
+tf_ranges<-atacs_hsc@assays$lin_peaks@motifs@positions[[GetMotifIDs(atacs_hsc,motif.names = tf)]]
+
+
+tf_dt <- data.table(as.data.frame(tf_ranges))
+tf_dt_reg<-tf_dt[seqnames==chromosome&start>start.pos&end<end.pos]
+
+p<-ggplot(data = tf_dt_reg) + geom_segment(aes(x = start, y = 0, 
+      xend = end, yend = 0),col="black", size = 2, data = tf_dt_reg)
+
+tf_junb<-p+ theme_classic() + ylab(label = tf) + 
+      theme(axis.ticks.y = element_blank(), axis.text.y = element_blank()) + 
+    xlab(label = paste0(chromosome, " position (bp)")) + 
+    xlim(c(start.pos, end.pos))
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = peak,
+                      motif.names= c("EGR1","KLF4"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+
+plots<-CombineTracks(
+  plotlist = list(cov_junb, meth_junb, peak_junb,tfs_plot, gene_junb),
+  expression.plot = expr_junb,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,"6F-genome_track_JUNB.pdf"),plot = plots,height = 7)
+
+
+
+#with all others [TODO]
+genes_of_int<-c("SOCS3","GADD45B", "LMNA","KLF2")
+
+#SOCS3
+gene<-"SOCS3"
+peaks_hsc_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peaks_hsc_anno[gene_name==gene]
+region<-"chr17-78352543-78361026"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+meth_plot<-MethChangePlot(res_meth,region = region)
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("EGR1","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+#GADD45B
+gene<-"GADD45B"
+peaks_da_anno[gene_name==gene]
+peaks_hsc_anno[gene_name==gene]
+region<-"chr19-2487779-2489556"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+meth_plot<-MethChangePlot(res_meth,region = region)
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("KLF4","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+#LMNA
+gene<-"LMNA"
+peaks_da_anno[gene_name==gene]
+peaks_hsc_anno[gene_name==gene]
+region<-"chr1-156113889-156124032"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+meth_plot<-MethChangePlot(res_meth,region = region)
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("KLF4","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+
+#KLF2
+gene<-"KLF2"
+peaks_da_anno[gene_name==gene]
+peaks_hsc_anno[gene_name==gene]
+region<-"chr19-16319352-16330749"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+meth_plot<-MethChangePlot(res_meth,region = region)
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("KLF4","KLF2","JUNB"),
+                      assay = "lin_peaks",pad=20,
+                      size=4,alpha = 0.6)
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+
+#KLF13
+gene<-"KLF13"
+peaks_da_anno[gene_name==gene]
+peaks_hsc_anno[gene_name==gene]
+region<-"chr15-31325484-31332622"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+meth_plot<-MethChangePlot(res_meth,region = region)
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+
 
 #SUPP####
 #distrib predic lineage
