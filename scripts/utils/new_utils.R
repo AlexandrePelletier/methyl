@@ -427,15 +427,23 @@ end<-function(x)as.numeric(strsplit(x,"-")[[1]][3])
 seqid<-function(x)strsplit(x,"-")[[1]][1]
   
 
-MethChangePlot<-function(res_meth,region){
-   start.pos <- start(region)
+MethChangeReg<-function(res_meth,region){
+  start.pos <- start(region)
+  end.pos <- end(region)
+  chromosome <- seqid(region)
+  res_meth_reg<-res_meth[chr==chromosome&pos>start.pos&pos<end.pos]
+  res_meth_reg[,start:=pos][,end:=pos+1]
+  return(res_meth_reg)
+  }
+MethChangePlot<-function(res_meth,region,limits=NULL,breaks=waiver()){
+  start.pos <- start(region)
   end.pos <- end(region)
   chromosome <- seqid(region)
   res_meth_reg<-res_meth[chr==chromosome&pos>start.pos&pos<end.pos]
   res_meth_reg[,start:=pos][,end:=pos+1]
   p<-ggplot(data = res_meth_reg) + geom_segment(aes(x = start, y = 0, 
         xend = end, yend = logFC,col=-log10(P.Value)), size = 2, data = res_meth_reg)+
-    scale_color_gradient(low = "white",high = "black")
+    scale_color_gradient(low = "white",high = "black",limits=limits,breaks=breaks)
   
   p<-p+ theme_classic() + ylab(label = "Methylation change") + 
       xlab(label = paste0(chromosome, " position (bp)")) + 

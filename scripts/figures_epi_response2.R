@@ -1533,7 +1533,7 @@ ggsave(fp(out,"6F-genome_track_JUNB.pdf"),plot = plots,height = 7)
 
 
 
-#with all others [TODO]
+#with all others
 genes_of_int<-c("SOCS3","GADD45B", "LMNA","KLF2")
 
 #SOCS3
@@ -1768,6 +1768,216 @@ plots<-CombineTracks(
 )
 plots
 ggsave(fp(out,ps("6F-genome_track_",gene,".pdf")),plot = plots,height = 7)
+
+
+#JUNB, KLF2, SOCS3 with same mehthchange pval col
+#JUNB
+res_meth_anno[gene=="JUNB"][order(pval)]
+gene<-"JUNB"
+peaks_hsc_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peaks_hsc_anno[gene_name==gene]
+region<-"chr19-12790000282794822"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+res_meth_reg<-MethChangeReg(res_meth,region)
+res_meth_reg[-log10(P.Value)>5]
+res_meth_reg[order(P.Value)]
+meth_plot<-MethChangePlot(res_meth,region = region,limits = c(0,4))
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("EGR1","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,"_v2.pdf")),plot = plots,height = 7)
+
+
+#SOCS3
+gene<-"SOCS3"
+peaks_hsc_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peaks_hsc_anno[gene_name==gene]
+region<-"chr17-78352543-78361026"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+res_meth_reg<-MethChangeReg(res_meth,region)
+res_meth_reg[-log10(P.Value)>5]
+res_meth_reg[order(P.Value)]
+meth_plot<-MethChangePlot(res_meth,region = region,limits = c(0,4))
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("EGR1","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,"_v2.pdf")),plot = plots,height = 7)
+
+#KLF2
+gene<-"KLF2"
+peaks_da_anno[gene_name==gene]
+peaks_hsc_anno[gene_name==gene]
+region<-"chr19-16319352-16330749"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+res_meth_reg<-MethChangeReg(res_meth,region)
+res_meth_reg[-log10(P.Value)>5]
+res_meth_reg[order(P.Value)]
+meth_plot<-MethChangePlot(res_meth,region = region,limits = c(0,4))
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("KLF4","KLF2","JUNB"),
+                      assay = "lin_peaks",pad=20,
+                      size=4,alpha = 0.6)
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,"_v2.pdf")),plot = plots,height = 7)
+
+#pval<0.05
+#JUNB
+res_meth_anno[gene=="JUNB"][order(pval)]
+gene<-"JUNB"
+peaks_hsc_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peaks_hsc_anno[gene_name==gene]
+region<-"chr19-12790128-12793822"
+
+cov_plot<-CoveragePlot(
+  object = atacs_hsc,
+  region = region,
+  group.by = "group",
+  annotation = F,
+  peaks = F
+)
+
+gene_plot <- AnnotationPlot(
+  object = atacs_hsc,
+  region = region
+)
+
+peak_plot <- PeakPlot(
+  object = atacs_hsc,assay = "lin_peaks",
+  region = region
+)
+
+expr_plot <- ExpressionPlot(
+  object = subset(cbps_hsc,hto==T),
+  features = gene,
+  assay = "SCT"
+)
+
+res_meth_reg<-MethChangeReg(res_meth,region)
+res_meth_reg[,pval:=sapply(P.Value,function(x)ifelse(x<0.001,"***",ifelse(x<0.01,"**",ifelse(x<0.05,"*","ns"))))]
+res_meth_reg[,pval:=factor(pval,levels = c("ns","*","**","***"))]
+meth_plot<-ggplot(data = res_meth_reg) + geom_segment(aes(x = start, y = 0, 
+        xend = end, yend = logFC,col=pval), size = 2, data = res_meth_reg)+
+    scale_color_manual(values = c("grey","yellow","orange","red"))
+  
+meth_plot<-meth_plot+ theme_classic() + ylab(label = "Methylation change") + 
+    xlab(label = paste0(seqid(region), " position (bp)")) + 
+    xlim(c(start(region), end(region)))
+
+
+tfs_plot<-TFsMotifPlot(atacs_hsc,
+                      region = region,
+                      motif.names= c("EGR1","KLF2"),
+                      assay = "lin_peaks",
+                      size=4,alpha = 0.6)
+
+plots<-CombineTracks(
+  plotlist = list(cov_plot, meth_plot, peak_plot,tfs_plot, gene_plot),
+  expression.plot = expr_plot,
+  heights = c(10, 6, 1,2,3),
+  widths = c(9, 2)
+)
+plots
+ggsave(fp(out,ps("6F-genome_track_",gene,"_v2.pdf")),plot = plots,height = 7)
 
 
 
