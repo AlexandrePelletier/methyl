@@ -1275,6 +1275,7 @@ ggplot(res_dmcs_peaks_enr)+
 ggsave(fp(out,"6C-dmcs_enrichment_in_lineage_spe_peaks.pdf"))
 
 
+
 # TF DMCs HSC peaks vs CpG peaks####
 res_motif_hsc_dmcs<-fread(fp(inp,"res_tf_motif_enrichment_in_DMCs_containing_vs_CpGs_containing_hsc_peaks.csv"))
 res_motif_hsc_dmcs[,pvalue:=pvalue+10^-316]

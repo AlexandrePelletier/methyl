@@ -67,6 +67,22 @@ egr1_genes<-intersect(peaks_hsc_genes[query_region%in%egr1_peaks]$gene_name,
                       regulons_list$EGR1)
 length(egr1_genes)/length(regulons_list$EGR1) #96% ! (25/26)
 
+#% EGR1 in all peaks ?
+egr1_in_peaks<-CheckMotif(atacs,
+                       peaks =rownames(atacs) ,
+                       motif.name = "EGR1",
+                       return.peaks = FALSE)
+sum(egr1_in_peaks)/nrow(atacs) #12%
+
+#% EGR1 in HSC peaks ?
+length(intersect(peaks_hsc_genes$query_region,rownames(atacs))) / nrow(atacs) #56% of all peaks are in HSC peaks
+egr1_in_hscpeaks<-CheckMotif(atacs,
+                       peaks =peaks_hsc_genes$query_region ,
+                       motif.name = "EGR1",
+                       return.peaks = FALSE)
+sum(egr1_in_hscpeaks)/length(unique(peaks_hsc_genes$query_region)) #19% 
+
+
 #egr1_extended
 peaks_close_EGR1_target<-peaks_hsc_genes[gene_name%in%regulons_list$EGR1e]$query_region
 egr1_peaks<-CheckMotif(atacs,
@@ -77,6 +93,59 @@ length(egr1_peaks)/length(peaks_close_EGR1_target) #17%
 egr1_genes<-intersect(peaks_hsc_genes[query_region%in%egr1_peaks]$gene_name,
                       regulons_list$EGR1e)
 length(egr1_genes)/length(regulons_list$EGR1e) #93% (393/424)
+
+#for KLF2
+
+peaks_close_KLF2_target<-peaks_hsc_genes[gene_name%in%regulons_list$KLF2]$query_region
+klf2_peaks<-CheckMotif(atacs,
+                       peaks =peaks_close_KLF2_target ,
+                       motif.name = "KLF2",
+                       return.peaks = TRUE)
+length(klf2_peaks)/length(peaks_close_KLF2_target) #32%
+klf2_genes<-intersect(peaks_hsc_genes[query_region%in%klf2_peaks]$gene_name,
+                      regulons_list$KLF2)
+length(klf2_genes)/length(regulons_list$KLF2) #90% !
+
+#% KLF2 in all peaks ?
+klf2_in_peaks<-CheckMotif(atacs,
+                       peaks =rownames(atacs) ,
+                       motif.name = "KLF2",
+                       return.peaks = FALSE)
+sum(klf2_in_peaks)/nrow(atacs) #17%
+
+#% KLF2 in HSC peaks ?
+klf2_in_hscpeaks<-CheckMotif(atacs,
+                       peaks =peaks_hsc_genes$query_region ,
+                       motif.name = "KLF2",
+                       return.peaks = FALSE)
+sum(klf2_in_hscpeaks)/length(unique(peaks_hsc_genes$query_region)) #24% 
+
+#for KLF4
+
+peaks_close_KLF4_target<-peaks_hsc_genes[gene_name%in%regulons_list$KLF4]$query_region
+klf4_peaks<-CheckMotif(atacs,
+                       peaks =peaks_close_KLF4_target ,
+                       motif.name = "KLF4",
+                       return.peaks = TRUE)
+length(klf4_peaks)/length(peaks_close_KLF4_target) #32%
+klf4_genes<-intersect(peaks_hsc_genes[query_region%in%klf4_peaks]$gene_name,
+                      regulons_list$KLF4)
+length(klf4_genes)/length(regulons_list$KLF4) #95% !
+
+#% KLF4 in all peaks ?
+klf4_in_peaks<-CheckMotif(atacs,
+                       peaks =rownames(atacs) ,
+                       motif.name = "KLF4",
+                       return.peaks = FALSE)
+sum(klf4_in_peaks)/nrow(atacs) #24%
+
+#% KLF2 in HSC peaks ?
+klf4_in_hscpeaks<-CheckMotif(atacs,
+                       peaks =peaks_hsc_genes$query_region ,
+                       motif.name = "KLF4",
+                       return.peaks = FALSE)
+sum(klf4_in_hscpeaks)/length(unique(peaks_hsc_genes$query_region)) #32% 
+
 
 #for all
 tfs_scenic<-unique(str_remove(names(regulons_list),"e$"))
@@ -337,7 +406,149 @@ ggnet2(net_egr1_a,
 ggsave(fp(out,"final_network_EGR1_KLF2_KLF4_tf_targets_2.pdf"))
 reg_egr1r1_peak1_meth1[n.dmcs.peak>1]
 
+#compare network epigen alter with other network
+#make complete tf - target epigen anno datafram
+#1)chrine change regulons anno
+res_a<-fread("outputs/15-chromatin_change_LGA_vs_Ctrl/differential_peaks_accessibility_lga_vs_ctrl_hsc_logFC0.csv.gz")
+res_a<-res_a[!str_detect(peak,"chr[XY]")]
+peaks_hsc_genes[,peak:=query_region]
+res_at<-merge(res_a,peaks_hsc_genes,by="peak")
+res_at[,target:=gene_name]
 
 
+peaks<-unique(res_at[target%in%regf$target]$peak)
+length(peaks)#12880
+
+motif.all <- GetMotifData(
+    object = atacs, assay = "lin_peaks", slot = "data"
+  )
+
+motifs_peaks_tfs <- motif.all[peaks,GetMotifIDs(atacs,unique(regf$tf)) , drop = FALSE]
+tf_peak_dt<-melt(data.table(data.frame(as.matrix(motifs_peaks_tfs==1)),keep.rownames = "peak"),id.vars = "peak",variable.name ="motif.id" ,value.name = "is_present")
+tf_peak_dt<-merge(tf_peak_dt,GetMotifIDs(atacs,unique(regf$tf),return_dt=TRUE))
+tf_peak_dt<-tf_peak_dt[is_present==TRUE]
+
+res_at_tf<-merge(res_at,tf_peak_dt,by="peak")
+res_at_tf[,tf:=motif.name]
+
+#merge with network df
+reg_tf_peaks<-merge(regf,
+                        res_at_tf[,.(tf,target,peak,p_val,p_val_adj,avg_log2FC,pct.1,pct.2,type)],
+                        by = c("tf","target"),
+                        all.x = T)
+
+reg_tf_peaks[,n.tf.target.peaks:=.N,by=.(tf,target)]
+reg_tf_peaks[,biggest_change:=p_val==min(p_val),.(tf,target)]
+reg_tf_peaks[(biggest_change)|is.na(biggest_change)]
+unique(reg_tf_peaks[(biggest_change)|is.na(biggest_change)],by=c("tf","target"))#ok
+
+
+reg_tf_peaks[,da.peak:=p_val_adj<0.001&abs(avg_log2FC)>0.25]
+reg_tf_peaks[,n.da.tf.target.peaks:=sum(da.peak),.(tf,target)]
+reg_tf_peaks[da.peak==T] #59
+fwrite(reg_tf_peaks,fp(out,"regulons_chrine_change_anno.csv"))
+
+#2) meth change regulons infos
+#need merge peaks DMCs df with regf df
+peaks_cpgs<-fread("outputs/14-DMCs_atac_integr/cpgs_in_lin_OCRs.csv.gz")
+peaks_meth<-merge(peaks_cpgs,fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz"))
+peaks_meth[,peak:=peaks]
+peaks_meth_hsc<-peaks_meth[peak%in%peaks_hsc_genes$peak]
+
+reg_tf_peaks_meth<-merge(reg_tf_peaks,
+                             peaks_meth_hsc[,.(peak,cpg_id,logFC,P.Value,adj.P.Val)],
+                             by="peak",
+                             all.x=T)
+reg_tf_peaks_meth[,n.cpg.peak:=.N,by=.(peak,tf)]
+reg_tf_peaks_meth[,biggest_meth_change:=P.Value==min(P.Value),.(peak,tf)]
+reg_tf_peaks_meth[(biggest_meth_change)|is.na(biggest_meth_change)] #ok
+
+
+reg_tf_peaks_meth[,dmcs:=P.Value<0.001&abs(logFC)>25]
+
+reg_tf_peaks_meth[,n.dmcs.peak:=sum(dmcs),.(peak,tf)]
+
+reg_tf_peaks_meth[dmcs==T] #485
+fwrite(reg_tf_peaks_meth,fp(out,"regulons_chrine__and_meth_change_anno.csv.gz"))
+
+#% genes of EGR1 / KLF2 KLF4 network epigen altered
+#for peak containing interactions
+reg_tf_peaks_methf<-reg_tf_peaks_meth[!is.na(peak)]
+pct.alter.netint<-length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))]$target))/length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")]$target))#22%
+pct.alter.netint#23%
+
+#compared to randomly peaks 3 TFs
+rand_alters<-sapply(1:1000,function(i){
+  set.seed(i)
+  tfs<-sample(unique(reg_tf_peaks_methf$tf),3)
+  pct.alter<-length(unique(reg_tf_peaks_methf[tf%in%tfs&((da.peak)|(dmcs))]$target))/length(unique(reg_tf_peaks_methf[tf%in%tfs]$target))
+  return(pct.alter)
+  })
+mean(rand_alters) #10%
+median(rand_alters) #9.6%
+
+sum(pct.alter.netint<rand_alters) #0.5% (p=0.005)
+
+#compared to randomly peaks n tf-gene pair
+tfsint<-c("EGR1","KLF2","KLF4")
+tf_genes<-unique(reg_tf_peaks_methf[,.(tf,target)])
+ntfgenes_int<-nrow(unique(reg_tf_peaks_methf[tf%in%tfsint][,.(tf,target)])) #154
+rand_alters<-sapply(1:1000,function(i){
+  set.seed(i)
+  tf_genes_s<-tf_genes[sample(1:.N,ntfgenes_int)]
+  reg_tf_peaks_meth_s<-merge(reg_tf_peaks_methf,tf_genes_s,by=c("tf","target"))
+  pct.alter<-nrow(unique(reg_tf_peaks_meth_s[((da.peak)|(dmcs))][,.(tf,target)]))/ntfgenes_int
+  return(pct.alter)
+  })
+mean(rand_alters) #10%
+median(rand_alters) #9%
+
+sum(pct.alter.netint<rand_alters) #0% (p<0.001)
+
+#same for DEGs
+#need add DEGs infos
+res_e<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")[lineage=="HSC"]
+res_e[,degs:=padj<0.05&abs(log2FoldChange)>0.5]
+res_e[,down:=padj<0.05&log2FoldChange<0]
+
+res_e[,target:=gene]
+
+reg_tf_peaks_meth_expr<-merge(reg_tf_peaks_meth,res_e,by="target")
+fwrite(reg_tf_peaks_meth_expr,fp(out,"regulons_chrine_meth_and_expr_change_anno.csv.gz"))
+
+reg_tf_peaks_meth_exprf<-reg_tf_peaks_meth_expr[!is.na(peak)]
+
+pct.alter.netint<-length(unique(reg_tf_peaks_meth_exprf[tf%in%c("EGR1","KLF2","KLF4")&(down)]$target))/length(unique(reg_tf_peaks_meth_exprf[tf%in%c("EGR1","KLF2","KLF4")]$target))
+
+
+pct.alter.netint#22%
+
+#compared to randomly peaks 3 TFs
+rand_alters<-sapply(1:1000,function(i){
+  set.seed(i)
+  tfs<-sample(unique(reg_tf_peaks_meth_exprf$tf),3)
+  pct.alter<-length(unique(reg_tf_peaks_meth_exprf[tf%in%tfs&(down)]$target))/length(unique(reg_tf_peaks_meth_exprf[tf%in%tfs]$target))
+  return(pct.alter)
+  })
+mean(rand_alters) #6%
+median(rand_alters) #5%
+
+sum(pct.alter.netint<rand_alters) #0.2% (p=0.002)
+
+#compared to randomly peaks n tf-gene pair
+tfsint<-c("EGR1","KLF2","KLF4")
+tf_genes<-unique(reg_tf_peaks_meth_exprf[,.(tf,target)])
+ntfgenes_int<-nrow(unique(reg_tf_peaks_meth_exprf[tf%in%tfsint][,.(tf,target)])) #154
+rand_alters<-sapply(1:1000,function(i){
+  set.seed(i)
+  tf_genes_s<-tf_genes[sample(1:.N,ntfgenes_int)]
+  reg_tf_peaks_meth_exprf_s<-merge(reg_tf_peaks_meth_exprf,tf_genes_s,by=c("tf","target"))
+  pct.alter<-nrow(unique(reg_tf_peaks_meth_exprf_s[(down)][,.(tf,target)]))/ntfgenes_int
+  return(pct.alter)
+  })
+mean(rand_alters) #5%
+median(rand_alters) #5%
+
+sum(pct.alter.netint<rand_alters) #0% (p<0.001)
 
 

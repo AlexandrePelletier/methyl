@@ -405,7 +405,7 @@ GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
 CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
   require("Signac")
   if(is.null(assay))assay<-DefaultAssay(object)
-  motif<-GetMotifID(object,motif.name,assay=assay)
+  motif<-GetMotifIDs(object,motif.name,assay=assay)
   motif.all <- GetMotifData(
     object = object, assay = assay, slot = "data"
   )
