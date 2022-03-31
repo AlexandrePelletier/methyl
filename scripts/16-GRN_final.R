@@ -477,6 +477,11 @@ reg_tf_peaks_methf<-reg_tf_peaks_meth[!is.na(peak)]
 pct.alter.netint<-length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))]$target))/length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")]$target))#22%
 pct.alter.netint#23%
 
+nonplotted<-setdiff(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))]$target),
+         c("ARRDC2","KLF13","AHNAK","RHOC","HEXIM1","TSC22D1","INTS6","TINAGL1","CD151","PTGER4","DDIT","TOB1","ETS1",
+           "SOCS3","JUNB","CDKN1C","PRNP","GADD45B","LMNA","MYADM","DDIT4"))
+nonplotted#"ID3"     "UBC"     "EIF5"    "TGIF1"   "NFATC1"  "PHACTR2" "IFRD1"  
+reg_tf_peaks_methf[tf%in%tfsint&target%in%nonplotted&((da.peak)|(dmcs))]
 #compared to randomly peaks 3 TFs
 rand_alters<-sapply(1:1000,function(i){
   set.seed(i)

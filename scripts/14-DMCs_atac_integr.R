@@ -421,6 +421,21 @@ length(unique(cpgs_in_ocrs_lin$peaks)) #66k/215k peaks
 
 fwrite(cpgs_in_ocrs_lin,fp(out,"cpgs_in_lin_OCRs.csv.gz"))
 
+#% DMCs overlapping linOCR
+cpgs_in_ocrs_lin<-fread(fp(out,"cpgs_in_lin_OCRs.csv.gz"))
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+
+peaks_meth<-merge(cpgs_in_ocrs_lin,res_meth,by="cpg_id")
+nrow(peaks_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #74%
+
+#vs % CpGs overlapping 
+nrow(peaks_meth)/nrow(res_meth) #36%
+
+(nrow(peaks_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]))/(nrow(peaks_meth)/nrow(res_meth)) #2 foldenrichment
+
+
+OR(set1 = res_meth[P.Value<0.001&abs(logFC)>25]$cpg_id,
+   set2= peaks_meth$cpg_id,size_universe = nrow(res_meth))
 
 #4) linspe OCRs (findmarkers)
 #   a) new assays
@@ -568,6 +583,8 @@ peaks_hsc_dmcs<-intersect(peaks_dmcs,lin_spe_peaks$HSC)
 peaks_hsc_dmcs_anno<-ClosestFeature(atacs,peaks_hsc_dmcs)
 peaks_hsc_dmcs_anno$gene_name
 fwrite(peaks_hsc_dmcs_anno,fp(out,"anno_hsc_dmcs_peaks.csv"))
+
+
 
 #  d) EGR1 enrichment in HSC spec peaks ?
 # Get a list of motif position frequency matrices from the JASPAR database
@@ -835,3 +852,51 @@ fwrite(res_or_degs_dmcs_tf_genes,fp(out,"res_degs_enrichment_in_dmcs_tf_hsc_gene
 res_or_degs_dmcs_tf_genes[padj<0.05] #not sig
 
 
+#GO analysis of HSC peaks containing DMCs
+library(clusterProfiler)
+library(enrichplot)
+library(org.Hs.eg.db)
+peaks_hsc_genes<-fread(fp(out,"peaks_hsc_genes_anno.csv.gz"))
+
+cpgs_in_ocrs_lin<-fread(fp(out,"cpgs_in_lin_OCRs.csv.gz"))
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+res_meth[P.Value<0.001&abs(logFC)>25]
+peaks_meth<-merge(cpgs_in_ocrs_lin,res_meth,by="cpg_id")
+peaks_hsc_genes[,peaks:=query_region]
+peaks_hsc_genes_meth<-merge(peaks_hsc_genes,peaks_meth,by="peaks")
+unique(peaks_hsc_genes_meth[P.Value<0.001&abs(logFC)>25]$gene_name)
+
+res_go_bp<-enrichGO(bitr(unique(peaks_hsc_genes_meth[P.Value<0.001&abs(logFC)>25]$gene_name),
+                         fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID,ont = "BP",
+                 OrgDb = org.Hs.eg.db,pvalueCutoff = 1,qvalueCutoff = 1,maxGSSize = 800,
+                 universe =bitr(unique(peaks_hsc_genes_meth$gene_name),fromType = "SYMBOL",
+                             toType = "ENTREZID",OrgDb = org.Hs.eg.db)$ENTREZID)
+
+res_go_dt<-data.table(as.data.frame(res_go_bp))
+res_go_dt[p.adjust<0.05]#36
+res_go_dt[p.adjust<0.1]$Description
+emapplot(pairwise_termsim(res_go_bp),showCategory = 36,cex_label_category=0.66)
+res_go_dt[Description=="negative regulation of growth"]
+res_go_dt[Description=="regulation of growth"] #nop
+saveRDS(res_go_bp,fp(out,"res_go_bp_dmcs_hsc_peaks.rds"))
+fwrite(res_go_dt,fp(out,"res_go_bp_dmcs_hsc_peaks.csv.gz"))
+
+#gsego
+
+peaks_hsc_genes_meth[P.Value<0.001&abs(logFC)>25,dmcscore.peak:=max(-log10(P.Value)*abs(logFC)),by=.(peaks)]
+peaks_hsc_genes_meth[P.Value<0.001&abs(logFC)>25,dmcscore.gene:=mean(dmcscore.peak),by=.(gene_name)]
+res_dt1<-merge(peaks_hsc_genes_meth,
+              data.table(bitr(unique(peaks_hsc_genes_meth$gene_name),fromType = "SYMBOL",toType = "ENTREZID",OrgDb = org.Hs.eg.db,drop=F))[,gene_name:=SYMBOL],by="gene_name")[!is.na(ENTREZID)]
+genelist<-unique(res_dt1[!is.na(dmcscore.gene)][order(-dmcscore.gene)],by="ENTREZID")$dmcscore.gene
+names(genelist)<-unique(res_dt1[!is.na(dmcscore.gene)][order(-dmcscore.gene)],by="ENTREZID")$ENTREZID
+
+res_gsea_go<- gseGO(geneList     =genelist , 
+                    ont="BP",
+                    exponent = 1,
+                        minGSSize    = 10,maxGSSize = 500,
+                        pvalueCutoff = 1,
+                        eps = 0,scoreType="pos",
+                        OrgDb = org.Hs.eg.db)
+res_go_dt<-data.table(as.data.frame(res_gsea_go))
+res_go_dt[p.adjust<0.05]#0
