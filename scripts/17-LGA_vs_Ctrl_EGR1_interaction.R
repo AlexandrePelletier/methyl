@@ -2,7 +2,7 @@ out<-"outputs/17-LGA_vs_Ctrl_EGR1_interaction"
 dir.create(out)
 source("scripts/utils/new_utils.R")
 
-renv::install("arrow")
+#renv::install("arrow")
 
 ####Functions####
 RunScenic<-function(seurat_object,
@@ -167,4 +167,103 @@ ggplot(res_interf_stats,aes(x=avg_log2FC,y=-log10(padj)))+
 res_interf_stats[padj<0.001]
 
 res_interf_stats[Target=="EGR1"]
+
+#for samples independantly with RNA assay
+#run 17C
+tfgs<-fread(fp(out,"sample_runs/tf_targets_interactions_by_samples.csv.gz"))
+tfgs
+
+#EGR1, KLF2, KLF4, reduce interactions with target in LGA ?
+tf_of_int<-c("EGR1","KLF2","KLF4")
+tfgs_int<-tfgs[TF%in%tf_of_int]
+
+
+#filter for targets validating with scATAC-seq
+tftargets<-fread("outputs/16-GRN_final/tf_target_interactions.csv")
+tftargets[,TF:=tf][,Target:=target]
+tftargets[!(extended)]
+
+tfgs_intf<-merge(tfgs_int,tftargets[!(extended),.(TF,Target)])
+tfgs_intf[,group:=str_extract(sample,"ctrl|lga")]
+tfgs_intf[,hto:=as.logical(str_extract(sample,"FALSE|TRUE"))]
+
+#sample do not have same amount of cells, Is there a ncell influence on interac wieght ?
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+mtd[,avg.rna.count:=mean(nCount_RNA),by="sample_hto"]
+mtd[,avg.gene.count:=mean(nFeature_RNA),by="sample_hto"]
+tfgs_intf[,sample_hto:=sample]
+tfgs_intfm<-merge(tfgs_intf,unique(mtd[,.(sample_hto,n.sample,avg.rna.count,avg.gene.count)]),by="sample_hto")
+
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(n.sample),y=weight)) #seems to be a negative influence
+
+#avg RNA count ?
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=weight)) #positive influence
+
+#==>need normalize weight or include in the model.
+
+#normalize weight for boxplot
+?scale
+tfgs[,scaled.weight:=scale(weight,center = F),by="sample"]
+tfgs_int<-tfgs[TF%in%tf_of_int]
+tfgs_intf<-merge(tfgs_int,tftargets[!(extended),.(TF,Target)])
+tfgs_intf[,group:=str_extract(sample,"ctrl|lga")]
+tfgs_intf[,hto:=as.logical(str_extract(sample,"FALSE|TRUE"))]
+tfgs_intf[,sample_hto:=sample]
+
+tfgs_intfm<-merge(tfgs_intf,unique(mtd[,.(sample_hto,n.sample,avg.rna.count,avg.gene.count)]),by="sample_hto")
+
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(n.sample),y=scaled.weight)) #seems to be a negative influence
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=scaled.weight)) #positive influence
+
+
+p1<-ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=scaled.weight)) 
+p2<-ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=weight)) 
+p1/p2 #doesnt change a lot
+
+tfgs_intfm[,avg.scaled.weight:=mean(scaled.weight),by=c("sample_hto","TF")]
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=hto,y=avg.scaled.weight,fill=group))+facet_wrap("TF") 
+
+#include in a model for stat
+tfgs_intfm[,avg.weight:=mean(weight),by=c("sample_hto","TF")]
+
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="KLF4"],by="sample_hto")))
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="EGR1"],by="sample_hto")))
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="KLF2"],by="sample_hto")))
+
+
+#scaled at regulons level
+tfgsf<-merge(tfgs,tftargets[!(extended),.(TF,Target)])
+
+tfgsf[,scaled.weight:=scale(weight,center = F),by="sample"]
+tfgs_intf<-tfgsf[TF%in%tf_of_int]
+tfgs_intf[,group:=str_extract(sample,"ctrl|lga")]
+tfgs_intf[,hto:=as.logical(str_extract(sample,"FALSE|TRUE"))]
+tfgs_intf[,sample_hto:=sample]
+
+tfgs_intfm<-merge(tfgs_intf,unique(mtd[,.(sample_hto,n.sample,avg.rna.count,avg.gene.count)]),by="sample_hto")
+
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(n.sample),y=scaled.weight)) #ok
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=scaled.weight)) #
+
+
+p1<-ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=scaled.weight)) 
+p2<-ggplot(tfgs_intfm)+geom_boxplot(aes(x=as.factor(avg.rna.count),y=weight)) 
+p1/p2 #better but not perfect
+
+tfgs_intfm[,avg.scaled.weight:=mean(scaled.weight),by=c("sample_hto","TF")]
+ggplot(tfgs_intfm)+geom_boxplot(aes(x=hto,y=avg.scaled.weight,fill=group))+facet_wrap("TF") 
+
+#include in a model for stat
+tfgs_intfm[,avg.weight:=mean(weight),by=c("sample_hto","TF")]
+
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="KLF4"],by="sample_hto")))
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="EGR1"],by="sample_hto")))
+summary(lm(avg.weight~group*hto+avg.rna.count+n.sample,data = unique(tfgs_intfm[TF=="KLF2"],by="sample_hto")))
+
+
+#CCL : overall doesnt see interaction differences between LGA and control, maybe too much noise/technical bias
+
+ggplot(tfgs_intfm[TF=="EGR1"&Target=="SOCS3"])+geom_boxplot(aes(x=hto,y=weight,fill=group))
+
+ggplot(tfgs_intfm[TF=="KLF2"&Target=="SOCS3"])+geom_boxplot(aes(x=hto,y=weight,fill=group))
 

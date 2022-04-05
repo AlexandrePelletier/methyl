@@ -339,7 +339,7 @@ reg_egr1r1_peaks[,n.da.tf.target.peaks:=sum(da.peak),.(tf,target)]
 
 reg_egr1r1_peaks[da.peak==T] #9
 
-reg_egr1r1_peak1<-reg_egr1r1_peaks[(biggest_change)|is.na(biggest_change)]
+#reg_egr1r1_peak1<-reg_egr1r1_peaks[(biggest_change)|is.na(biggest_change)]
 
 #add DMCs infos on edge
 #need merge peaks DMCs df with reg_egr1 df
@@ -348,34 +348,39 @@ peaks_meth<-merge(peaks_cpgs,fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/r
 peaks_meth[,peak:=peaks]
 peaks_meth_hsc<-peaks_meth[peak%in%peaks_hsc_genes$peak]
 
-reg_egr1r1_peak1_meth<-merge(reg_egr1r1_peak1,
+reg_egr1r1_peak_meth<-merge(reg_egr1r1_peaks,
                              peaks_meth_hsc[,.(peak,cpg_id,logFC,P.Value,adj.P.Val)],
                              by="peak",
                              all.x=T)
-reg_egr1r1_peak1_meth[,n.cpg.peak:=.N,by=.(peak,tf)]
-reg_egr1r1_peak1_meth[,biggest_meth_change:=P.Value==min(P.Value),.(peak,tf)]
-reg_egr1r1_peak1_meth[(biggest_meth_change)|is.na(biggest_meth_change)] #ok
+reg_egr1r1_peak_meth[,n.cpg.peak:=.N,by=.(peak,tf)]
+reg_egr1r1_peak_meth[,biggest_meth_change:=P.Value==min(P.Value),.(peak,tf)]
+reg_egr1r1_peak_meth[(biggest_meth_change)|is.na(biggest_meth_change)] #ok
 
 
-reg_egr1r1_peak1_meth[,dmcs:=P.Value<0.001&abs(logFC)>25]
+reg_egr1r1_peak_meth[,dmcs:=P.Value<0.001&abs(logFC)>25]
 
-reg_egr1r1_peak1_meth[,n.dmcs.peak:=sum(dmcs),.(peak,tf)]
+reg_egr1r1_peak_meth[,n.dmcs.peak:=sum(dmcs),.(peak,tf)]
 
-reg_egr1r1_peak1_meth[dmcs==T] #24
+reg_egr1r1_peak_meth[dmcs==T] #36
 
-reg_egr1r1_peak1_meth1<-reg_egr1r1_peak1_meth[(biggest_meth_change)|is.na(biggest_meth_change)]
+reg_egr1r1_peak1_meth1<-reg_egr1r1_peak_meth[biggest_change|is.na(biggest_change)|(biggest_meth_change)|is.na(biggest_meth_change)]
+reg_egr1r1_peak1_meth1[,da:=unique(da[biggest_change==T]),.(tf,target)]
+reg_egr1r1_peak1_meth1[,n.dmcs:=sum(unique(n.dmcs.peak[biggest_meth_change==T]),na.rm = T),.(tf,target)]
 
+reg1<-unique(reg_egr1r1_peak1_meth1[,-c("extended","biggest_change","biggest_meth_change","peak")])
+reg1<-unique(reg1,by=c('tf',"target"))
+reg1<-reg1[!is.na(da)]
 
 #ADD edge atttibute (tf> target) : color depend of if atac based tf> target interact is altered by chromatin change
 #if tf-gene peak dn : blue if tf-gene peak up :  red
 
-net_egr1_a<-network(reg_egr1r1_peak1_meth1[,-c("extended","biggest_change","biggest_meth_change","peak")],loops = T,directed = T)
+net_egr1_a<-network(reg1,loops = T,directed = T)
 list.edge.attributes(net_egr1_a)
 as.matrix(net_egr1_a,attrname='da')
 net_egr1_a %e% "da"
 net_egr1_a %e% "da"=sapply(net_egr1_a %e% "da",function(x)ifelse(x=="grey75","darkgrey",x))
 
-net_egr1_a %e% "dmc_line"=net_egr1_a %e% "n.dmcs.peak"+1
+net_egr1_a %e% "dmc_line"=net_egr1_a %e% "n.dmcs"+1
 net_egr1_a %e% "dmc_line"=sapply(net_egr1_a %e% "dmc_line",function(x)ifelse(is.na(x),1,x))
 
 #set.edge.attribute(net_egr1, "color", ifelse(net_egr1 %e% "dap" > 1, "black", "grey75"))
@@ -403,7 +408,7 @@ ggnet2(net_egr1_a,
        arrow.gap =0.02) +
   theme(panel.background = element_rect(fill = "white"))
 
-ggsave(fp(out,"final_network_EGR1_KLF2_KLF4_tf_targets_2.pdf"))
+ggsave(fp(out,"final_network_EGR1_KLF2_KLF4_tf_targets_2.pdf"),width = 10,height = 10)
 reg_egr1r1_peak1_meth1[n.dmcs.peak>1]
 
 #compare network epigen alter with other network
@@ -470,6 +475,7 @@ reg_tf_peaks_meth[,n.dmcs.peak:=sum(dmcs),.(peak,tf)]
 
 reg_tf_peaks_meth[dmcs==T] #485
 fwrite(reg_tf_peaks_meth,fp(out,"regulons_chrine__and_meth_change_anno.csv.gz"))
+reg_tf_peaks_meth<-fread(fp(out,"regulons_chrine__and_meth_change_anno.csv.gz"))
 
 #% genes of EGR1 / KLF2 KLF4 network epigen altered
 #for peak containing interactions
@@ -477,6 +483,7 @@ reg_tf_peaks_methf<-reg_tf_peaks_meth[!is.na(peak)]
 pct.alter.netint<-length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))]$target))/length(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")]$target))#22%
 pct.alter.netint#23%
 
+unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))])
 nonplotted<-setdiff(unique(reg_tf_peaks_methf[tf%in%c("EGR1","KLF2","KLF4")&((da.peak)|(dmcs))]$target),
          c("ARRDC2","KLF13","AHNAK","RHOC","HEXIM1","TSC22D1","INTS6","TINAGL1","CD151","PTGER4","DDIT","TOB1","ETS1",
            "SOCS3","JUNB","CDKN1C","PRNP","GADD45B","LMNA","MYADM","DDIT4"))
