@@ -373,9 +373,9 @@ FindGOGenes<-function(terms_or_ids){
   if(!str_detect(terms_or_ids,"^GO:"))terms_or_ids=FindGO_ID(term_description=terms_or_ids)
   ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl") #uses human ensembl annotations
   #gets gene symbol, transcript_id and go_id for all genes annotated with GO:0007507
-  gene.data <- getBM(attributes=c('hgnc_symbol'),
+  gene.data <- getBM(attributes=c('hgnc_symbol','go_id'),
                    filters = 'go', values = terms_or_ids, mart = ensembl,uniqueRows = T)
-  return(data.table(gene.data))
+  return(data.table(gene.data)[go_id%in%terms_or_ids])
     }
 
 

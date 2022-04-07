@@ -60,7 +60,7 @@ res_g_perm<-Reduce(function(x,y)rbind(x,y,fill=T),mclapply(1:1000,function(i){
 
 res_g[,perm:=0]
 res_gp<-merge(res_g,res_g_perm,all=T)
-res_gp[,p.perm:=sum(p.adjust[perm==0]>=p.adjust[perm>0],na.rm=T)/(sum(perm>0,na.rm=T),by="ID"]
+res_gp[,p.perm:=sum(p.adjust[perm==0]>=p.adjust[perm>0],na.rm=T)/sum(perm>0,na.rm=T),by="ID"]
 
 message(nrow(res_gp[is.na(perm)&p.perm<0.01]), " traits are signif !") 
 

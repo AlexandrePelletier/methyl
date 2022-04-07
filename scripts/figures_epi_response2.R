@@ -1080,6 +1080,19 @@ ggplot(tf_alt_act[lineage_hmap=="HSC"&hto==T&regulon!="KLF2e"])+
   geom_boxplot(aes(x=regulon,y=activity,fill=group))+theme_bw()
 ggsave(fp(out,"5B-boxplot_tf_activity_change_padj0.001_avg_diff0.3_lga_vs_ctrl_hsc_hto.pdf"))
 
+#calc FC diff threshold
+mtd<-data.table(cbps@meta.data,keep.rownames = "cell")
+tfs<-unique(res_tf_diff$regulon)
+tf_act<-data.table(t(as.matrix(cbps@assays$TF_AUC@data[tfs,])),keep.rownames = "cell")
+tf_act<-melt(tf_act,id.vars = "cell",variable.name ="regulon",value.name = "activity" )
+tf_act<-merge(tf_act,mtd)
+tf_act_hschto<-tf_act[lineage_hmap=="HSC"&hto==T]
+tf_act_hschto[,FoldChange:=mean(activity[group=="lga"])/mean(activity[group=="ctrl"]),by="regulon"]
+
+max(tf_act_hschto[regulon%in%unique(res_tf_sig$regulon)]$FoldChange) #10%
+max(tf_act$activity)
+
+
 #regulons activation in response to hto stress
 res_hto_sig<-fread(fp(out,"3D-res_hto_signature_padj0.05_log2FC0.5.csv"))
 res_hto_sig[gene%in%res_tf_sig$regulon] #all are upreg

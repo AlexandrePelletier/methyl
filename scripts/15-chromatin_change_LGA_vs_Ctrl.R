@@ -74,6 +74,7 @@ peaks_hsc_lga_xy<-peaks_hsc_lga[!str_detect(peak,"chr[XY]")]
 
 fwrite(peaks_hsc_lga_xy,fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))
 
+
 ggplot(peaks_hsc_lga_xy,aes(x=avg_log2FC,y=-log10(p_val_adj),col=p_val_adj<0.001&abs(avg_log2FC)>0.25))+
   geom_point()+
   scale_color_manual(values = c("grey","red")) +
@@ -168,7 +169,12 @@ res_or_da_peaks_dmcs_degs<-OR3(da_peaks_list,
 
 fwrite(res_or_da_peaks_dmcs_degs,fp(out,"res_da_peaks_enrichment_in_dmcs_degs_hsc_peaks.csv"))
 
-
+#KLF2 Open Chrine DA ? 
+peaks_hsc_lga_xy<-fread(fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))
+peaks_hsc_genes<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+peaks_hsc_genes[,peak:=query_region]
+peak_da_genes<-merge(peaks_hsc_lga_xy,peaks_hsc_genes,all.x = T)
+peak_da_genes[gene_name=="KLF2"] #nop
 #GRN 2.0
 
 

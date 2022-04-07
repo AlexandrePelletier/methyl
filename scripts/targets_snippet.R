@@ -14,7 +14,6 @@ list(
   tar_target(file1_plot, command = plot(file1_dt)),
   tar_target(file1_g, command = g(file1_dt))
 )
-)
 
 mtd<-tar_read(file1_dt)
 g <- function(x) ...
