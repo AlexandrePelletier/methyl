@@ -77,6 +77,49 @@ sum(!is.na(as.matrix(velo_mat)))
 
 #for all HTO data
 #need first merge all velocito object #see https://github.com/basilkhuder/Seurat-to-RNA-Velocity#integrating-loom-file-and-meta-data
-out<-"outputs/09-Velocity/sc_velo_outputs"
-dir.create(out)
+#with cells kept in seurat analysis
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
 
+mtd[,cell_id:=paste(str_extract(bc,"[ATCG]+"),orig.ident,sep="_")]
+fwrite(mtd,"outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+#update reticulat because of bug
+renv::install("rstudio/reticulate")
+
+#get umap coord
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+
+cbps<-readRDS("outputs/06-integr_singlecell_cbps/cbps_filtered.rds")
+umap_coord<-data.table(cbps@reductions$ref.umap@cell.embeddings,keep.rownames = "bc")
+umap_coord<-merge(umap_coord,mtd[,.(bc,cell_id)])
+fwrite(umap_coord,"outputs/06-integr_singlecell_cbps/umap_cbps.csv")
+
+table(mtd[hto==T]$batch)
+
+#run 20B-scvelo
+#get velocity matrix
+library(Seurat)
+library(SeuratData)
+library(SeuratDisk)
+
+Convert("outputs/20-RNA_velocity/cbps_hto_velo_anndata.h5ad", dest = "h5seurat", overwrite = TRUE)
+cbps_velo <- LoadH5Seurat("outputs/20-RNA_velocity/cbps_hto_velo_anndata.h5seurat") #Error: Missing required datasets 'levels' and 'values'
+
+cbps<-readRDS("outputs/06-integr_singlecell_cbps/cbps_filtered.rds")
+head(cbps[[]])
+
+velo<-fread("outputs/20-RNA_velocity/cbps_hto_velocity_matrix.csv")
+velo[1:10,.(cell_id)]
+velo<-as.matrix(t(data.frame(velo,row.names = "cell_id")))
+
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+mtdf<-mtd[cell_id%in%colnames(velo)]
+cbps_h<-cbps[,mtdf$bc]
+rm(cbps)
+cbps_h<-RenameCells(cbps_h,new.names = mtdf$cell_id )
+
+cbps_h[["velocity"]]<-CreateAssayObject(data =velo[2:nrow(velo),] )
+
+mtdvelo<-fread("outputs/20-RNA_velocity/cbps_hto_velocity_metadata.csv")
+mtdvelo[,cell_id:=V1]
+cbps_h<-AddMetaData(cbps_h,metadata = data.frame(mtdvelo[,-c("V1","batch")],row.names = "cell_id"))
+saveRDS(cbps_h,fp(out,"cbps_hto_with_velocity_assay.rds"))
