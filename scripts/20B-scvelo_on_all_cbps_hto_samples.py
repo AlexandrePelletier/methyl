@@ -76,6 +76,34 @@ cbps.write("outputs/20-RNA_velocity/cbps_hto_velo_anndata.h5ad")
 #save with metadata
 cbps.obs.to_csv("outputs/20-RNA_velocity/cbps_hto_velocity_metadata.csv")
 
+#save velocity_graph (correl cell trans and velocity vec)
+cbps=anndata.read("outputs/20-RNA_velocity/cbps_hto_velo_anndata.h5ad")
+
+velog=pd.DataFrame.sparse.from_spmatrix(cbps.uns['velocity_graph'],columns=cbps.obs.index) 
+velog.shape
+
+velog["cell_id"]=cbps.obs.index.values
+
+velog.to_csv("outputs/20-RNA_velocity/cbps_hto_velocity_graph_matrix.csv")
+
+#transition proba matrix 
+trans=scv.utils.get_transition_matrix(cbps)
+
+trans=pd.DataFrame.sparse.from_spmatrix(trans,columns=cbps.obs.index)  
+trans.head()
+trans.shape
+
+trans["cell_id"]=cbps.obs.index.values
+trans.to_csv("outputs/20-RNA_velocity/cbps_hto_transition_matrix.csv")
+
+
+#save velocity umap coord 
+velo_u=pd.DataFrame(cbps.obsm['velocity_umap'],columns=['humap_1','humap_2']) #add genes name 
+velo_u.shape
+velo_u["cell_id"]=cbps.obs.index.values
+
+velo_u.to_csv("outputs/20-RNA_velocity/cbps_hto_velocity_umap_coord.csv")
+
 
 #interpret important genes
 scv.pl.velocity(cbps, ['EGR1',  'KLF2', 'SOCS3', 'JUNB'], ncols=2,save="outputs/20-RNA_velocity/velocity_important_genes.pdf")

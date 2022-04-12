@@ -123,3 +123,52 @@ mtdvelo<-fread("outputs/20-RNA_velocity/cbps_hto_velocity_metadata.csv")
 mtdvelo[,cell_id:=V1]
 cbps_h<-AddMetaData(cbps_h,metadata = data.frame(mtdvelo[,-c("V1","batch")],row.names = "cell_id"))
 saveRDS(cbps_h,fp(out,"cbps_hto_with_velocity_assay.rds"))
+
+#next : analyze diff bias, diff gene regulation by lineage (IEGs upreg in HSC ?), reduce upregulation IEGs in LGA HSC ?
+cbps_h<-readRDS(fp(out,"cbps_hto_with_velocity_assay.rds"))
+
+#diff bias
+#diff "intensity" by lineage
+mtd<-data.table(cbps_h@meta.data,keep.rownames = "cell_id")
+lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+mtdl<-mtd[lineage_hmap%in%lins]
+mtdl[,lineage_hmap:=factor(lineage_hmap,levels = lins)]
+mtdl[,velo_len_avg:=mean(velocity_length),by=.(lineage_hmap,sample)]
+
+ggplot(unique(mtdl,by=c("sample","lineage_hmap")))+geom_boxplot(aes(x=lineage_hmap,y=velocity_length,fill=group))
+
+#Differentiation Analysis : ponderate average of the pseudotime of the predicted cells transition
+#need=> transition graph : correl change of expression between 2 cells and predict change based on the RNA velocity
+# need get velocity_graph
+trans<-fread("outputs/20-RNA_velocity/cbps_hto_transition_matrix.csv")
+trans<-as.matrix(t(data.frame(trans,row.names = "cell_id")))
+
+trans[1:10,1:10]
+trans<-trans[2:nrow(trans),]
+
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+mtdf<-mtd[cell_id%in%colnames(trans)]
+#add pseudotime
+pseudo<-fread("outputs/12-Pseudotime/metadata_pseudotime.csv")
+pseudo[,cell_id:=ps(str_extract(bc,"[ATCG]+"),orig.ident,sep='_')]
+mtdf<-merge(mtdf,pseudo[,.(cell_id,pseudotime)])
+mtdff<-mtdf[pseudotime!=Inf]
+summary(mtdff$pseudotime)
+mtdff[,pseudo_bias:=sapply(1:.N,function(i){
+  cell<-cell_id[i]
+  return(sum(pseudotime*trans[cell,cell_id]))
+  })]
+
+ggplot(mtdff)+geom_boxplot(aes(x=lineage_hmap,y=pseudo_bias,fill=group))
+
+lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+
+mtdffl<-mtdff[lineage_hmap%in%lins]
+mtdffl[,lineage_hmap:=factor(lineage_hmap,levels = lins)]
+mtdffl[,avg_pseudobias:=mean(pseudo_bias),by=.(lineage_hmap,sample)]
+
+ggplot(unique(mtdffl,by=c("sample","lineage_hmap")))+geom_boxplot(aes(x=lineage_hmap,y=avg_pseudobias,fill=group))
+unique(mtdffl[lineage_hmap=="MPP/LMPP"],by=c("sample","lineage_hmap"))
+
+#[to continue]
+
