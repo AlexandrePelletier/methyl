@@ -381,7 +381,7 @@ atacs<-readRDS(fp(out,"cbps_atacs.rds"))
 
 renv::use_python()
 #reticulate::install_miniconda()
-reticulate::use_miniconda()
+#reticulate::use_miniconda()
 reticulate::py_install(packages ="MACS2")
 
 peaks <- CallPeaks(
