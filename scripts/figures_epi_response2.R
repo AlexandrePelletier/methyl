@@ -1995,6 +1995,64 @@ ggsave(fp(out,ps("6F-genome_track_",gene,"_v2.pdf")),plot = plots,height = 7)
 
 
 
+
+#7G: pseudotime bias rna velo based
+mtdff<-fread("outputs/20-RNA_velocity/pseudo_bias_rna_velo_based_lineages.csv.gz")
+lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+
+
+mtdff[,lineage_hmap:=factor(lineage_hmap,levels=c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas"))]
+ggplot(mtdff[lineage_hmap%in%lins])+
+  geom_boxplot(aes(x=group,y=pseudo_bias,fill=group,group=sample),outlier.shape = NA)+
+  facet_wrap("lineage_hmap")
+
+ggplot(mtdff[lineage_hmap%in%lins])+
+  geom_boxplot(aes(x=lineage_hmap,y=pseudo_bias,fill=group))+
+  coord_cartesian(ylim = c(-25,100))
+ggsave(fp(out,"7G-boxplot_differentiation_bias_cell_level.pdf"))
+
+mtdff[,pval:=t.test(pseudo_bias[group=="lga"],
+                           pseudo_bias[group=="ctrl"])$p.value,
+        by="lineage_hmap"]
+unique(mtdff[,.(lineage_hmap,pval)])
+
+#    lineage_hmap         pval
+# 1:     MPP/LMPP 4.843362e-01
+# 2:          HSC 9.008333e-11
+# 3:  Erythro-Mas 5.701923e-04
+# 4:     Lymphoid 4.429514e-04
+# 5:      Myeloid 3.395650e-07
+# 6:       LT-HSC 4.602892e-01
+
+# ggplot(mtdff[lineage_hmap%in%lins])+
+#   geom_boxplot(aes(x=group,y=pseudo_bias,fill=group),outlier.shape = NA)+
+#   facet_wrap("lineage_hmap")+
+#   coord_cartesian(ylim = c(0,50))
+
+lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+
+mtdffl<-mtdff[lineage_hmap%in%lins]
+mtdffl[,lineage_hmap:=factor(lineage_hmap,levels = lins)]
+mtdffl[,avg_pseudobias:=mean(pseudo_bias),by=.(lineage_hmap,sample)]
+mtdffls<-unique(mtdffl,by=c("sample","lineage_hmap"))
+ggplot(mtdffls)+geom_boxplot(aes(x=lineage_hmap,y=avg_pseudobias,fill=group))
+ggsave(fp(out,"7G-boxplot_differentiation_bias_sample_level.pdf"))
+mtdffls[,pval:=t.test(avg_pseudobias[group=="lga"],
+                           avg_pseudobias[group=="ctrl"])$p.value,
+        by="lineage_hmap"] 
+unique(mtdffls[,.(lineage_hmap,pval)])
+
+#    lineage_hmap       pval
+# 1:     MPP/LMPP 0.41856808
+# 2:          HSC 0.03910725
+# 3:  Erythro-Mas 0.91731411
+# 4:     Lymphoid 0.75722049
+# 5:      Myeloid 0.32957624
+# 6:       LT-HSC 0.27182012
+
+
+#unique(mtdffl[lineage_hmap=="MPP/LMPP"],by=c("sample","lineage_hmap"))
+
 #SUPP####
 #distrib predic lineage
 hmap<-readRDS("outputs/05-make_hematomap/hematomap_ctrls_sans_stress.rds")

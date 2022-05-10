@@ -5,10 +5,10 @@ import numpy as np
 import matplotlib as plt
 #%load_ext rpy2.ipython
 
-cbp2 = anndata.read_loom("../singlecell/outputs/09-Velocity/velocyto_counts/cbp2/possorted_genome_bam_97NV3.loom")
-cbp3 = anndata.read_loom("../singlecell/outputs/09-Velocity/velocyto_counts/cbp3/possorted_genome_bam_CF6IK.loom")
-cbp4 = anndata.read_loom("../singlecell/outputs/09-Velocity/velocyto_counts/cbp4/possorted_genome_bam_QIW9J.loom")
-cbp8 = anndata.read_loom("../singlecell/outputs/09-Velocity/velocyto_counts/cbp8/possorted_genome_bam_B7ECE.loom")
+cbp2 = anndata.read_loom("outputs/20-RNA_velocity/velocyto_counts/cbp2/possorted_genome_bam_97NV3.loom")
+cbp3 = anndata.read_loom("outputs/20-RNA_velocity/velocyto_counts/cbp3/possorted_genome_bam_CF6IK.loom")
+cbp4 = anndata.read_loom("outputs/20-RNA_velocity/velocyto_counts/cbp4/possorted_genome_bam_QIW9J.loom")
+cbp8 = anndata.read_loom("outputs/20-RNA_velocity/velocyto_counts/cbp8/possorted_genome_bam_B7ECE.loom")
 
 #filter for cells that pass Seurat QC
 #need homogene cell_id first

@@ -81,3 +81,32 @@ velo_u.to_csv("outputs/20-RNA_velocity/cbps_hto_dynamical_velocity_umap_coord.cs
 #interpret important genes
 scv.pl.velocity(cbps, ['EGR1',  'KLF2', 'SOCS3', 'JUNB'], ncols=2,save="outputs/20-RNA_velocity/dynamical_velocity_important_genes.pdf")
 
+
+#likelihood in dynamical model (~ dynamic behaviour of the genes)
+#save gene metadata
+cbps=anndata.read("outputs/20-RNA_velocity/cbps_hto_dynamical_velo.h5ad")
+
+cbps.var.to_csv("outputs/20-RNA_velocity/cbps_hto_dynamical_genes_metadata.csv")
+
+#likelihood by lineage
+mtd=pd.read_csv("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+mtd["lineage_hmap"]
+mtdvelo=cbps.obs
+mtdvelo["cell_id"]=cbps.obs.index
+mtdvelo=mtdvelo.merge(mtd,on="cell_id")
+mtdvelo["cell_id"].head()
+
+cbps.obs["lineage_hmap"]=mtdvelo["lineage_hmap"].values
+cbps.obs["lineage_hmap"].head()
+cbps.obs["lineage_hmap"]=cbps.obs["lineage_hmap"].astype("category")
+# lins=["LT-HSC","HSC","MPP/LMPP","Lymphoid","Myeloid","Erythro-Mas"]
+# cbpsf=cbps[np.isin(cbps.obs["lineage_hmap"],lins)]
+
+scv.tl.rank_dynamical_genes(cbps, groupby='lineage_hmap')
+#ValueError: mismatch between the number of fields and the number of arrays
+#scv.logging.print_version()
+
+dynalin = scv.get_df(cbps, 'rank_dynamical_genes/names')
+dynalin.head(30)
+
+dynalin.to_csv("outputs/20-RNA_velocity/dynamical_genes_by_lineage.csv")
