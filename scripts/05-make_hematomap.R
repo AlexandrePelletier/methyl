@@ -24,6 +24,10 @@ hmap_list<-lapply(hmap_list, SCTransform,
                   method = "glmGamPoi")
 
 hmap_list<-lapply(hmap_list,function(x){
+  x <- CellCycleScoring(x,s.features = cc.genes$s.genes,
+                                 g2m.features = cc.genes$g2m.genes,
+                                 set.ident = TRUE,
+                                 search=TRUE)
   x$CC.Difference <- x$S.Score - x$G2M.Score
   return(x)
   })

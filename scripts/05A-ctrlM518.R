@@ -67,13 +67,6 @@ DimPlot(cbp,label=T,group.by = "sex.ID")+p2
 cbp[["sample"]]<-cbp[["sex.ID"]]
 
 cbp_s<-subset(cbp,sample%in%c(sample_female,sample_male))
-cbp_s <-SCTransform(cbp_s,vars.to.regress = c("percent.mt","CC.Difference"))
-cbp_s <- RunPCA(cbp_s, features = VariableFeatures(cbp_s))
-cbp_s <- RunUMAP(cbp_s, dims = 1:30)
-
-ps<-DimPlot(cbp_s,label=T,group.by = c("sample","Phase"),combine=F)
-ps[[3]]<-FeaturePlot(cbp_s,"percent.mt")
-wrap_plots(ps)
 
 
 saveRDS(subset(cbp,sample==sample_male),fp(out,ps(sample_male,".rds")))
