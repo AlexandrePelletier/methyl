@@ -6,9 +6,12 @@ library(Seurat)
 #renv::install("Signac")
 library(Signac)
 
+#O) scATACseq datasets Preprocessing
+#run 14A-merge_cbps_atac1-4
+
 #I) BULK OCRs####
 #1)DMCs overlap in OCR ?
-atacs<-readRDS("../atac/outputs/cbps_merged/cbps_atac1-4_merged_qc.rds")
+atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atac1-4_merged_qc.rds")
 nrow(atacs) #126925
 ocrs<-data.table(peaks=rownames(atacs))
 ocrs[,chr:=str_extract(peaks,"chr[0-9XY]+"),]
