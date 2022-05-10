@@ -11,21 +11,15 @@ suppressPackageStartupMessages({
   source("scripts/utils/new_utils.R")
   library(AUCell)
   library(SCENIC)
-  source("../singlecell/scripts/utils/scenic_utils.R")
+  source("scripts/utils/scenic_utils.R")
 })
 
-
-### Tables and Figures Theme =======================================================================
-# theme_set(theme_light())
-
-
-### Functions ======================================================================================
 
 
 ### Analysis =======================================================================================
 
 cbps<-readRDS("outputs/06-integr_singlecell_cbps/cbps_filtered.rds")
-regulons_list<-readRDS("../singlecell/outputs/05-SCENIC/cbps0-8_clean/regulons_list.rds")
+regulons_list<-readRDS("outputs/10-SCENIC/cbps_14k/regulons_list.rds")
 
 #with AUCell
 cells_rankings <- AUCell_buildRankings(as.matrix(cbps@assays$RNA@counts),nCores = 20)

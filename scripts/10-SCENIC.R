@@ -6,14 +6,14 @@ library(Seurat)
 #run 10A-
 
 
+#then, run scenic on subset of cbps cells
+#run 10B-do_scenic_on_cbps_14k with working directory = out #[to update]
 
-#run do_scenic_on_cbps0-8_clean.r with working directory = out #[to update]
-
-#get regulon activity by cells 
-#run 10B-get_regul_activity
+#then, get regulon activity for all cells 
+#run 10C-get_regul_activity
 
 
-#added integrated and SCENIC assa cbps_map_on_hmap
+#saved added SCENIC assay  on cbps
 cbps<-readRDS(fp(out,"cbps_with_regulons_activity.rds"))
 saveRDS(cbps@assays$TF_AUC,fp(out,"TF_AUC_assay.rds"))
 VlnPlot(cbps, c("STAT3","GATA1","SPI1"),group.by="lineage",pt.size = 0) 
@@ -43,12 +43,8 @@ tf_markers<-FindAllMarkers(cbps,logfc.threshold = 0)
 tf_markers<-data.table(tf_markers)[,cell_type:=cluster][,regulon:=gene][,-c('cluster','gene')]
 fwrite(tf_markers,fp(out,"tf_markers_cell_type.csv.gz"),sep=";")
 
-saveRDS(cbps,"../singlecell/outputs/cbps0_8.rds")
 
-#[end to do update]
-
-
-#tf activity stim vs not  by lineage
+#tf activity hto vs not  by lineage
 Idents(cbps)<-"lineage_hmap"
 i<-0
 for(lin in levels(cbps)){
