@@ -18,7 +18,7 @@ bed_inter<- function(a, b, opt1="-wa", opt2="-wb",out_dir=".", select=NULL, col.
     if(is.data.frame(x)){
       files_to_rm[i]<-TRUE
       file_path<-fp(out_dir,paste0("temp",i,".bed"))
-      fwrite(x,file_path,sep="\t")
+      fwrite(x,file_path,sep="\t",col.names = FALSE)
       
     }else{
       file_path<-x
@@ -422,9 +422,9 @@ CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
   
  
 }
-start<-function(x)as.numeric(strsplit(x,"-")[[1]][2])
-end<-function(x)as.numeric(strsplit(x,"-")[[1]][3])
-seqid<-function(x)strsplit(x,"-")[[1]][1]
+start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][2]))
+end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][3]))
+seqid<-function(x)sapply(x,function(x)strsplit(x,"-")[[1]][1])
   
 
 MethChangeReg<-function(res_meth,region){

@@ -911,6 +911,13 @@ mtdvelo[,cell_id:=V1]
 cbps_h<-AddMetaData(cbps_h,metadata = data.frame(mtdvelo[,-c("V1","batch")],row.names = "cell_id"))
 saveRDS(cbps_h@assays$velocity,fp(out,"cbps_hto_dynamical_velocity_assay.rds"))
 
+#latent time follow diff ? 
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+mtd<-merge(mtdvelo,mtd,by="cell_id")
+
+ggplot(mtd)+geom_boxplot(aes(x=lineage_hmap,y=latent_time))
+ggplot(mtd)+geom_boxplot(aes(x=lineage_hmap,y=latent_time,fill=group))
+
 #velo length bias ?
 mtd<-data.table(cbps_h@meta.data,keep.rownames = "cell_id")
 lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")

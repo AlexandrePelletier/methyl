@@ -9,7 +9,7 @@ library(Signac)
 
 #renv::install('Bioconductor/BiocGenerics')
 #renv::install('Bioconductor/GenomeInfoDb')
-renv::install("bioc::EnsDb.Hsapiens.v86")
+#renv::install("bioc::EnsDb.Hsapiens.v86")
 library(EnsDb.Hsapiens.v86)
 library(BSgenome.Hsapiens.UCSC.hg38)
 
@@ -343,4 +343,103 @@ p2 <- CoveragePlot(
 
 patchwork::wrap_plots(p1, p2, ncol = 1)
 
+
+peak_links_dt<-data.table(as.data.frame(Links(cbl12)))
 saveRDS(cbl12,fp(out,"cbl12.rds"))
+fwrite(peak_links_dt,fp(out,"res_peaks_genes_links_important_genes.csv"))
+
+#all peak genes links
+#run 21A
+#n of peak gene link, what are the limits, how improve with MULTI GRN ++
+
+peak_links_dt<-fread(fp(out,"res_peaks_genes_links_all_genes.csv.gz"))
+
+peak_links_dt #4590 peak gene link
+unique(peak_links_dt,by="gene") #2664 genes
+
+unique(peak_links_dt,by="peak") #4170 peaks
+
+#n links in EGR1N
+egr1n<-fread("outputs/16-GRN_final/egr1_KLF2_KLF4_network_tf_target_interactions.csv")
+egr1n_genes<-unique(c(egr1n$target,egr1n$tf))
+egr1n_genes# 123 genes
+
+unique(peak_links_dt[gene%in%egr1n_genes],by="gene") #41/123 egr1n genes have linked peak
+
+unique(peak_links_dt[gene%in%egr1n_genes]$gene)
+#  [1] "ID3"     "TINAGL1" "LMNA"    "ATF3"    "ID2"     "ZFP36L2" "PELI1"   "CXCR4"   "ARL4C"  
+# [10] "CTNNB1"  "NFKBIZ"  "TIPARP"  "SKIL"    "HES1"    "EGR1"    "IER3"    "BRD2"    "CDKN1A" 
+# [19] "EZR"     "NDRG1"   "OTUD1"   "DDIT4"   "NFKB2"   "CD151"   "GRASP"   "BTG1"    "PNP"    
+# [28] "FOS"     "CALM1"   "EIF5"    "AKAP13"  "SOCS3"   "NFATC1"  "MIDN"    "GADD45B" "IER2"   
+# [37] "ZFP36"   "FOSB"    "ZNF667"  "PRNP"    "MAFF" 
+
+#n of peaks by genes
+table(peak_links_dt[gene%in%egr1n_genes]$gene)
+#  AKAP13   ARL4C    ATF3    BRD2    BTG1   CALM1   CD151  CDKN1A  CTNNB1   CXCR4   DDIT4    EGR1 
+#       1       2       2       1       1       1       1       2       1       2       1       5 
+#    EIF5     EZR     FOS    FOSB GADD45B   GRASP    HES1     ID2     ID3    IER2    IER3    LMNA 
+#       1       1       4       3       5       1       4       5       1       2       5       1 
+#    MAFF    MIDN   NDRG1  NFATC1   NFKB2  NFKBIZ   OTUD1   PELI1     PNP    PRNP    SKIL   SOCS3 
+#       2       2       3       1       1       2       1       2       1       1       1       2 
+# TINAGL1  TIPARP   ZFP36 ZFP36L2  ZNF667 
+#       1       6       4       1       1 
+
+#merge with DMCs
+peak_links_dt[,chr:=seqnames]
+peak_links_dt[,start.peak:=start(peak)]
+peak_links_dt[,end.peak:=end(peak),by="peak"]
+
+res_cpgs<-fread("outputs/14-DMCs_atac_integr/res_cpgs_hg38.cs.gz")
+cpgs_in_cres<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
+          peak_links_dt[,.(chr,start.peak,end.peak,peak)][order(chr,start.peak,end.peak)],
+          select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peak","start","end"))
+
+length(unique(cpgs_in_cres$cpg_id))#7854/750k cpgs
+length(unique(cpgs_in_cres$peak)) #1.7k/4.2k peaks
+
+fwrite(cpgs_in_cres,fp(out,"cpgs_in_CREs.csv.gz"))
+
+#% DMCs overlapping CREs
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+
+cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
+nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #2.5% DMCs are in CREs 
+
+#vs % CpGs overlapping 
+nrow(cres_meth)/nrow(res_meth) #1% CpGs are in CREs
+
+(nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]))/(nrow(cres_meth)/nrow(res_meth)) #2.3 foldenrichment
+
+
+OR(set1 = res_meth[P.Value<0.001&abs(logFC)>25]$cpg_id,
+   set2= cres_meth$cpg_id,size_universe = nrow(res_meth)) #p = 3.627709e-15
+
+#in EGRn
+#DMCs overlapping CREs EGRN
+cres_cpgs_egrn<-merge(cpgs_in_cres,peak_links_dt[gene%in%egr1n_genes][,-c("start","end")])
+cres_meth_egrn<-merge(cres_cpgs_egrn,res_meth,by="cpg_id")
+cres_meth_egrn[P.Value<0.001&abs(logFC)>25] #1DMCs only, in CRE of NFATC1
+
+#vs CpGs overlapping 
+nrow(cres_meth_egrn) #472 CpGs are in CREs EGRN
+
+#increase Meth in CREs EGRN vs CREs ?
+cres_meth[,in_EGRN:=cpg_id%in%cres_meth_egrn$cpg_id]
+
+ggplot(cres_meth)+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #nop
+
+
+
+
+
+ #CCL : only 5k identified CREs, (2.5% DMCs and only 1% CpG are in it),
+#41/123 Egr1 genes have CREs, only 472 CpGs and 1DMCs fall in it.
+##==> dont capture stress responsive methylation impacted CREs.
+
+#NEED 1) do scMulti on +/- Stim 
+# 2) improve CREs indentif, need know which celltype this CREs are active, and build a GRN based on it.
+
+#1) 
+#can we use HTO to multiplex conditons ???
+#=> cbl12 HTO
+#see 21B
