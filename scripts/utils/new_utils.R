@@ -370,7 +370,7 @@ FindGOGenes<-function(terms_or_ids){
   require("biomaRt")
   require("stringr")
 
-  if(!str_detect(terms_or_ids,"^GO:"))terms_or_ids=FindGO_ID(term_description=terms_or_ids)
+  if(!all(str_detect(terms_or_ids,"^GO:")))terms_or_ids=FindGO_ID(term_description=terms_or_ids)
   ensembl = useMart("ensembl",dataset="hsapiens_gene_ensembl") #uses human ensembl annotations
   #gets gene symbol, transcript_id and go_id for all genes annotated with GO:0007507
   gene.data <- getBM(attributes=c('hgnc_symbol','go_id'),
@@ -422,6 +422,28 @@ CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
   
  
 }
+
+GetMotif<-function(object,peaks,assay = "peaks"){
+#return tfmotif peak data.table
+  require("Signac")
+  require("data.table")
+
+  if(is.null(assay))assay<-DefaultAssay(object)
+  motif.all <- GetMotifData(
+    object = cbl12, assay = assay, slot = "data"
+  )
+  motif.filtered<-motif.all[peak_genes_linksf$peak,,drop=F]
+  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),variable.name="motif.id",value.name = "presence")
+  motif_dt[,presence:=as.logical(presence)]
+  motif_dt[(presence)] #2.3k motifs in this CREs
+  motif_dt<-motif_dt[(presence)][,-"presence"]
+  motif_dt[,motif:=object@assays$peaks@motifs@motif.names[motif.id]]
+  return(motif_dt)
+}
+
+  
+ 
+
 start<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][2]))
 end<-function(x)sapply(x,function(x)as.numeric(strsplit(x,"-")[[1]][3]))
 seqid<-function(x)sapply(x,function(x)strsplit(x,"-")[[1]][1])

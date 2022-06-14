@@ -429,9 +429,6 @@ cres_meth[,in_EGRN:=cpg_id%in%cres_meth_egrn$cpg_id]
 ggplot(cres_meth)+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #nop
 
 
-
-
-
  #CCL : only 5k identified CREs, (2.5% DMCs and only 1% CpG are in it),
 #41/123 Egr1 genes have CREs, only 472 CpGs and 1DMCs fall in it.
 ##==> dont capture stress responsive methylation impacted CREs.
@@ -443,3 +440,34 @@ ggplot(cres_meth)+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #nop
 #can we use HTO to multiplex conditons ???
 #=> cbl12 HTO
 #see 21B
+
+
+#Annexe####
+#add TF motif on cbl12
+cbl12<-readRDS("outputs/21-CREs_inference_with_sc_multiomics_cbls/cbl12.rds")
+library(JASPAR2020)
+library(TFBSTools)
+
+#renv::install("bioc::BSgenome.Hsapiens.UCSC.hg38")
+#renv::install("bioc::motifmatchr")
+
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+# Get a list of motif position frequency matrices from the JASPAR database
+#?getMatrixSet
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(species = "Homo sapiens", all_versions = FALSE)
+)
+
+# add motif information
+#?AddMotifs
+DefaultAssay(cbl12)<-"peaks"
+cbl12 <- AddMotifs(
+  object = cbl12,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  pfm = pfm
+)
+
+saveRDS(cbl12,fp(out,"cbl12.rds"))
+

@@ -217,9 +217,33 @@ DefaultAssay(pbmc)<-"SCT"
 
 #CREs inference improvement####
 #0) what are the TPr, FPr, and AUC of signac method ?
+#cbl12
+cbl12_links<-fread("outputs/21-CREs_inference_with_sc_multiomics_cbls/res_peaks_genes_links_all_genes.csv.gz")
+
+pvalue_threshold<-0.05
+cbl12_links[,sig.link:=pvalue<pvalue_threshold&score>0.05]
+cbl12_links[,n_sig.link:=sum(sig.peak)]
+
+
+cbl12_links[,gene.start:=start]
+cbl12_links[,peak.start:=start(peak)]
+cbl12_links[,tss_dist:=peak.start-gene.start]
+plot(density(cbl12_links$tss_dist))
+
+cbl12_links[,peaks_TSS:=abs(tss_dist)<1000] 
+
+length(unique(cbl12_links[(peaks_TSS)]$peak))#2176/4170
+length(unique(cbl12_links$peak))#4170 => 52% significant peaks are < 1kb
+cbl12_links[,n_peaks_TSS:=sum(peaks_TSS)]
+
+cbl12_links[,n_TP:=pvalue<pvalue_threshold&peaks_TSS]
+
+cbl12_links[,TP_rate:=n_TP/n_peaks_TSS]
+cbl12_links[,FP_rate:=pvalue_threshold]
+
 #pbmcs
 #run 21Ca-pbmc_multi_cres_inference.R
-#cbl12
+
 
 #1) take into account drop out effect ?####
 
