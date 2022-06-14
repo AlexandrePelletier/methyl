@@ -86,6 +86,95 @@ peak_genes_linksf[order(peak,gene)]
 peaks_motifs<-GetMotif(cbl12,peaks = peak_genes_linksf$peak)
 peaks_motifs
 
+#calculate TF motifs enrichment in CREs 
+#use the signac motif enrichment function, 
+length(unique(peak_genes_links$peak)) #4170
+motif_enrich<-FindMotifs(cbl12,features =peak_genes_links$peak,background = 40000 ) #Matching GC.percent distribution
+motif_enrich<-data.table(motif_enrich)
+motif_enrich
+peaks_motifs[,motif.name:=as.character(motif.name)]
+pme<-merge(peaks_motifs,motif_enrich,all.x=T)
+pme[fold.enrichment>1.25&pvalue<0.001] #764/2331 peak-TF motif (32%) have TF motif enriched in the CREs
+#number of TF enriched / number of TF tot :
+length(unique(pme[fold.enrichment>1.25&pvalue<0.001]$motif))
+length(unique(pme$motif))#141/584 (24%)
+
+#validate TF binding in peak based on TF footprint
+some_lineage_markers<-c("MPO","VPREB1","LTB","GATA1","GATA2","EGR1","CD99","SELL","CDK6",
+                        "HBD","FOS","CEBPA","AVP","DUSP2","ID1")
+
+library(BSgenome.Hsapiens.UCSC.hg38)
+cbl12 <- Footprint(
+  object = cbl12,
+  motif.name = c("GATA2", "CEBPA", "EBF1"),
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  in_peaks=TRUE
+)
+
+lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Erythro-Mas","Lymphoid","expected")
+
+p <- PlotFootprint(cbl12, features = c("GATA2", "CEBPA", "EBF1"),idents = lins)
+p + patchwork::plot_layout(ncol = 1)
+foot_dt<-data.table(GetFootprintData(cbl12,features = c("GATA2", "CEBPA", "EBF1") ))
+foot_dtf<-foot_dt[abs(position)<100]
+foot_dtf[,avg.norm.count:=mean(count),by=.(group,class,feature)]
+fs<-unique(foot_dtf,by=c("group","class","feature"))
+fs[is.na(group),group:="expected"]
+ggplot(fs[group%in%lins])+geom_col(aes(x=feature,y=avg.norm.count,fill=group),position = "dodge")
+?Footprint
+
+#for some lineage TFs
+
+some_lineage_tfs<-c("SPI1","CEBPA",
+                   "TCF3","STAT1",
+                   "GATA1","GATA2","TAL1",
+                   "HOXA9","HOXB4",
+                   "EGR1","FOS","JUNB","GATA3","KLF2")
+some_lineage_tfsf<-intersect(unique(pme$motif.name),some_lineage_tfs)
+cbl12
+cbl12 <- Footprint(
+  object = cbl12,
+  motif.name = some_lineage_tfsf,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  in_peaks=TRUE,upstream = 100,downstream = 100
+)
+
+foot_dt<-data.table(GetFootprintData(cbl12,features = some_lineage_tfsf ))
+foot_dt[is.na(group),group:="expected"]
+foot_dt[,avg.norm.count:=mean(norm.value),by=.(group,feature)]
+foot_dt[,min.close.count:=min(norm.value[abs(position)<6]),by=.(group,feature)]
+table(foot_dt[abs(position)<6]$group,foot_dt[abs(position)<6]$feature)
+
+fwrite(foot_dt,fp(out,"footprinting_some_lineage_tf_cbl12.csv.gz"))
+
+fs<-unique(foot_dt,by=c("group","feature"))
+ggplot(fs[group%in%lins])+
+  geom_col(aes(x=feature,y=avg.norm.count,fill=group),position = "dodge")+coord_cartesian(ylim = c(0.8,1.2))
+
+
+
+fs[,dt_count:=avg.norm.count-min.close.count,by=.(group,feature)]
+ggplot(fs[group%in%lins])+
+  geom_col(aes(x=feature,y=dt_count,fill=group),position = "dodge")
+
+ PlotFootprint(cbl12, features = c("EGR1", "KLF2", "CEBPA"),idents = lins)
+fs[,dt_count_expected:=dt_count[group=="expected"][1],by="feature"]
+
+fs[,dt_dt_count:=dt_count-dt_count_expected,by=.(group,feature)]
+fs[,deux_dt_dt_count:=2^dt_dt_count]
+
+
+
+ggplot(fs[group%in%lins])+
+  geom_col(aes(x=feature,y=avg.norm.count,fill=group),position = "dodge")+coord_cartesian(ylim = c(0.8,1.2))
+
+ggplot(fs[group%in%lins])+geom_col(aes(x=feature,y=dt_dt_count,fill=group),position = "dodge")
+
+#a continuer : 1) comment est calculer l'expected ? 2) le gap a +/-5pb du TF est il biologically signif ?
+#=> 3) include in annot TF CREs
+#Can we have a measure of Tn5 insertion /enrichment at peak level ??
+#=> use tiles plot to see
+
 AnnotCRE<-function(peak_genes_links){
   #function which annotate CREs, with TF motif annotation 
   #return TF motif if located in the peak, and score of TF role/presence

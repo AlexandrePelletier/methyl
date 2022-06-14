@@ -433,11 +433,11 @@ GetMotif<-function(object,peaks,assay = "peaks"){
     object = cbl12, assay = assay, slot = "data"
   )
   motif.filtered<-motif.all[peak_genes_linksf$peak,,drop=F]
-  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),variable.name="motif.id",value.name = "presence")
+  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),variable.name="motif",value.name = "presence")
   motif_dt[,presence:=as.logical(presence)]
   motif_dt[(presence)] #2.3k motifs in this CREs
   motif_dt<-motif_dt[(presence)][,-"presence"]
-  motif_dt[,motif:=object@assays$peaks@motifs@motif.names[motif.id]]
+  motif_dt[,motif.name:=object@assays$peaks@motifs@motif.names[motif]]
   return(motif_dt)
 }
 
