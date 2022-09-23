@@ -175,6 +175,8 @@ ggplot(fs[group%in%lins])+geom_col(aes(x=feature,y=dt_dt_count,fill=group),posit
 #Can we have a measure of Tn5 insertion /enrichment at peak level ??
 #=> use tiles plot to see
 
+
+
 AnnotCRE<-function(peak_genes_links){
   #function which annotate CREs, with TF motif annotation 
   #return TF motif if located in the peak, and score of TF role/presence

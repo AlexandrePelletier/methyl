@@ -14,9 +14,9 @@ cbps<-NormalizeData(cbps)
 cbps<-ScaleData(cbps)
 cbps<-RunPCA(cbps,assay = "RNA",reduction.name = "pca_null")
 
-# cbps<-FindNeighbors(cbps,dims = 1:15,reduction = "pca_null",graph.name = c("nn","z_snn"))
-# cbps<-FindClusters(cbps,resolution = 0.6,graph.name = "z_snn")
-# cbps$z_rna_clusters<-Idents(cbps)
+cbps<-FindNeighbors(cbps,dims = 1:15,reduction = "pca_null",graph.name = c("nn","snn_null"))
+cbps<-FindClusters(cbps,resolution = 0.6,graph.name = "snn_null")
+cbps$rna_null_clusters<-Idents(cbps)
 cbps<-RunUMAP(cbps,reduction = "pca_null",dims = 1:30,
               reduction.name = "umap_null",reduction.key = "nUMAP_" )
 
@@ -26,24 +26,22 @@ DimPlot(cbps,reduction = "umap_null",group.by = "hto")
 DimPlot(cbps,reduction = "umap_null",group.by = "group")
 FeaturePlot(cbps,c("MPO","LTB"),max.cutoff = "q95",reduction = "zumap")
 
-#SCT
-DefaultAssay(cbps)<-"SCT"
-#VariableFeatures(cbps)<-Reduce(union,lapply(SplitObject(cbps,split.by = "orig.ident"),function(x)VariableFeatures(FindVariableFeatures(x))))
-cbps<-RunPCA(cbps,assay = "SCT",reduction.name = "pca_sct",features = rownames(cbps))
-
-# cbps<-FindNeighbors(cbps,dims = 1:15,reduction = "pca_null",graph.name = c("nn","z_snn"))
-# cbps<-FindClusters(cbps,resolution = 0.6,graph.name = "z_snn")
-# cbps$z_rna_clusters<-Idents(cbps)
-cbps<-RunUMAP(cbps,reduction = "pca_null",dims = 1:30,
-              reduction.name = "umap_null",reduction.key = "nUMAP_" )
-
-DimPlot(cbps,reduction = "umap_null",group.by = c("batch"))
-DimPlot(cbps,reduction = "umap_null",group.by = c("lineage_hmap"),label = T)
-DimPlot(cbps,reduction = "umap_null",group.by = "hto")
-DimPlot(cbps,reduction = "umap_null",group.by = "group")
-FeaturePlot(cbps,c("MPO","LTB"),max.cutoff = "q95",reduction = "zumap")
-
-
+# #SCT
+# DefaultAssay(cbps)<-"SCT"
+# #VariableFeatures(cbps)<-Reduce(union,lapply(SplitObject(cbps,split.by = "orig.ident"),function(x)VariableFeatures(FindVariableFeatures(x))))
+# cbps<-RunPCA(cbps,assay = "SCT",reduction.name = "pca_sct",features = rownames(cbps))
+# 
+# # cbps<-FindNeighbors(cbps,dims = 1:15,reduction = "pca_null",graph.name = c("nn","z_snn"))
+# # cbps<-FindClusters(cbps,resolution = 0.6,graph.name = "z_snn")
+# # cbps$z_rna_clusters<-Idents(cbps)
+# cbps<-RunUMAP(cbps,reduction = "pca_null",dims = 1:30,
+#               reduction.name = "umap_null",reduction.key = "nUMAP_" )
+# 
+# DimPlot(cbps,reduction = "umap_null",group.by = c("batch"))
+# DimPlot(cbps,reduction = "umap_null",group.by = c("lineage_hmap"),label = T)
+# DimPlot(cbps,reduction = "umap_null",group.by = "hto")
+# DimPlot(cbps,reduction = "umap_null",group.by = "group")
+# FeaturePlot(cbps,c("MPO","LTB"),max.cutoff = "q95",reduction = "zumap")
 
 #with seurat based batxh effect corr
 DimPlot(cbps,reduction = "ref.umap",group.by = c("batch"))
@@ -55,7 +53,8 @@ z<-fread("outputs/scGANs_batch_correction/z_15_embeddings.csv",header = T,select
 
 z_mat<-as.matrix(data.frame(z,row.names = "cell_label"))
 colnames(z_mat)<-as.numeric(str_extract_all(colnames(z_mat),"[0-9]+"))
-
+dim(z_mat)
+cbps
 cbps[["z_rna"]]<-CreateDimReducObject(z_mat,key = "z_")
 DefaultAssay(cbps)<-"RNA"
 cbps<-FindNeighbors(cbps,dims = 1:15,reduction = "z_rna",graph.name = c("z_nn","z_snn"))
@@ -71,7 +70,7 @@ DimPlot(cbps,reduction = "zumap",group.by = "hto")
 DimPlot(cbps,reduction = "zumap",group.by = "group")
 FeaturePlot(cbps,c("MPO","LTB"),max.cutoff = "q95",reduction = "zumap")
 
-
+saveRDS(cbps,fp(out,"cbps_filtered_with_scGANs_red_dims.rds"))
 #test all cells with 15 embeddings sct norm
 z<-fread("outputs/scGANs_batch_correction/z_embeddings_sct.csv",header = T,select = 2:17,
          col.names = c(paste0("z_",1:15),"cell_label"))

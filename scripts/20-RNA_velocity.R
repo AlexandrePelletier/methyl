@@ -959,16 +959,21 @@ mtdff[,pseudo_bias:=pseudo_pred-pseudotime]
 
 
 fwrite(mtdff,fp(out,"pseudo_bias_rna_velo_based_lineages.csv.gz"))
+mtdff<-fread(fp(out,"pseudo_bias_rna_velo_based_lineages.csv.gz"))
+
 lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
 
 
 mtdff[,lineage_hmap:=factor(lineage_hmap,levels=c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas"))]
 ggplot(mtdff[lineage_hmap%in%lins])+
   geom_boxplot(aes(x=group,y=pseudo_bias,fill=group,group=sample),outlier.shape = NA)+
-  facet_wrap("lineage_hmap")
+  facet_wrap("lineage_hmap")+coord_cartesian(ylim = c(-20,60))
 
 ggplot(mtdff[lineage_hmap%in%lins])+
-  geom_boxplot(aes(x=lineage_hmap,y=pseudo_bias,fill=group))
+  geom_boxplot(aes(x=lineage_hmap,y=pseudo_bias,fill=group))+
+  scale_fill_manual(values = c("white","grey"))+
+  theme_minimal()
+ggsave(fp(out,"boxplot_pseudobias_lga_ctrl.pdf"))
 
 ggplot(mtdff[lineage_hmap%in%lins])+
   geom_boxplot(aes(x=group,y=pseudo_bias,fill=group),outlier.shape = NA)+

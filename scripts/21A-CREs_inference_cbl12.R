@@ -1,5 +1,5 @@
 
-out<-"outputs/21-CREs_inference_with_sc_multiomics_cbls"
+out<-"outputs/27-multiomics_cbl_stim/"
 
 source("scripts/utils/new_utils.R")
 library(Seurat)
@@ -9,7 +9,7 @@ library(BSgenome.Hsapiens.UCSC.hg38)
 
 set.seed(1234)
 
-cbl12<-readRDS(fp(out,"cbl12.rds"))
+cbl12<-readRDS(fp(out,"cbls.rds"))
 DefaultAssay(cbl12)<-"peaks"
 Idents(cbl12)<-"lineage_hmap"
 

@@ -422,22 +422,38 @@ CheckMotif<-function(object,peaks,motif.name,assay = NULL,return.peaks=FALSE){
   
  
 }
-
-GetMotif<-function(object,peaks,assay = "peaks"){
+GetMotifIDs<-function(object,motif.names,assay=NULL,return_dt=FALSE){
+  if(is.null(assay))assay<-DefaultAssay(object)
+  idx<-match(motif.names,object@assays[[assay]]@motifs@motif.names)
+  if(return_dt){
+    return(
+      data.table(motif.name=motif.names,
+                 motif.id=names(object@assays[[assay]]@motifs@motif.names[idx]))
+      )
+    }else{
+  return(names(object@assays[[assay]]@motifs@motif.names[idx]))
+    }
+  
+  }
+GetMotif<-function(object,peaks,motifs=NULL,assay = "peaks"){
 #return tfmotif peak data.table
   require("Signac")
   require("data.table")
 
   if(is.null(assay))assay<-DefaultAssay(object)
   motif.all <- GetMotifData(
-    object = cbl12, assay = assay, slot = "data"
+    object = object, assay = assay, slot = "data"
   )
-  motif.filtered<-motif.all[peak_genes_linksf$peak,,drop=F]
-  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),variable.name="motif",value.name = "presence")
+  if(is.null(motifs)) motifs<-colnames(motif.all)
+  motif.filtered<-motif.all[peaks,motifs,drop=F]
+  motif_dt<-melt(data.table(as.matrix(motif.filtered),keep.rownames = "peak"),
+                 variable.name="motif",value.name = "presence")
   motif_dt[,presence:=as.logical(presence)]
-  motif_dt[(presence)] #2.3k motifs in this CREs
+  motif_dt[(presence)] 
   motif_dt<-motif_dt[(presence)][,-"presence"]
-  motif_dt[,motif.name:=object@assays$peaks@motifs@motif.names[motif]]
+  
+  motifsnames<-data.table(motif.name=object@assays$peaks@motifs@motif.names,motif=names(object@assays$peaks@motifs@motif.names))
+  motif_dt<-merge(motif_dt,motifsnames)
   return(motif_dt)
 }
 
