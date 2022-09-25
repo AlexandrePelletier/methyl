@@ -4,25 +4,43 @@ source("scripts/utils/new_utils.R")
 
 
 #0) Quiescence bias ?
-mtd<-data.table(cbps@meta.data,keep.rownames = "bc")
+mtd<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
 mtd$Phase<-factor(mtd$Phase,levels = c("G1","S","G2M"))
 
 #G2M score
 ggplot(mtd)+geom_boxplot(aes(x=hto,y=G2M.Score,fill=group),outlier.shape = NA)+
   coord_cartesian(ylim = c(-0.2,0.12))
 
+#group level
+ggplot(subset(mtd,hto==T))+geom_bar(aes(x=group,fill=Phase),position = "fill")
+
 
 #pct Phase HSC/MPP
-mtdf<-subset(mtd,lineage_hmap%in%c("HSC","MPP/LMPP"))
-mtdf[,n.sample:=.N,.(sample_hto)]
-mtdf[,pct.phase:=.N/n.sample,by=.(sample_hto,Phase)]
-mts<-unique(mtdf,by=c("sample_hto","Phase"))
+mtdf<-subset(mtd,lineage_hmap==c("HSC","MPP/LMPP"))
 
-ggplot(mts)+geom_boxplot(aes(x=Phase,y=pct.phase*100,fill=group))+labs( x="Phase", y = "HSC/MPP (%)",fill="group")+
+ggplot(mtdf)+geom_bar(aes(x=group,fill=Phase),position = "fill")
+
+mtdf[,pct.SG2M:=sum(Phase%in%c("S","G2M"))/.N,by=.(sample_hto)]
+mts<-unique(mtdf,by=c("sample_hto"))
+
+ggplot(subset(mts,hto==T))+geom_boxplot(aes(x=group,y=pct.SG2M*100,fill=group))+labs( x="Group", y = "HSC/MPP in cycle (%)",fill="group")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
+
+#with rapidly process samples
+ggplot(mtd)+geom_bar(aes(x=group,fill=Phase),position = "fill")+facet_wrap("hto")
+
+ggplot(mtdf)+geom_bar(aes(x=group,fill=Phase),position = "fill")+facet_wrap("hto")
+
+ggplot(mts)+geom_boxplot(aes(x=group,y=pct.SG2M*100,fill=group))+labs( x="Group", y = "HSC/MPP in cycle (%)",fill="group")+
   facet_wrap("hto")+
    theme_classic() +
    scale_fill_manual(values=c('#999999','#E69F00'))
 
+
+ggplot(mts)+geom_boxplot(aes(x=group,y=pct.SG2M*100,fill=group))+labs( x="Group", y = "HSC/MPP in cycle (%)",fill="group")+
+   theme_classic() +
+   scale_fill_manual(values=c('#999999','#E69F00'))
 
 #bof
 #I)Validate differentiation bias with other approach
@@ -31,7 +49,71 @@ ggplot(mts)+geom_boxplot(aes(x=Phase,y=pct.phase*100,fill=group))+labs( x="Phase
 mtdff<-fread(fp(out,"pseudo_bias_rna_velo_based_lineages.csv.gz"))
 
 lins<-c("LT-HSC","HSC","MPP/LMPP","Myeloid","Lymphoid","Erythro-Mas")
+#bigger RNA velocity in HSC MPP
+cbps_h<-readRDS("outputs/20-RNA_velocity/cbps_hto_with_velocity_assay.rds")
+cbps_h[["velocity"]]<-readRDS("outputs/20-RNA_velocity/cbps_hto_dynamical_velocity_assay.rds")
+DefaultAssay(cbps_h)<-"velocity"
+sum(!is.na(cbps_h[["velocity"]]@data[,1]))
+avg.velo<-AverageExpression(cbps_h,features = rownames(cbps_h)[!is.na(cbps_h[["velocity"]]@data[,1])],group.by = "lineage_hmap",assays = "velocity",slot = "data")
+head(avg.velo$velocity)
+avg.velo<-melt(data.table(avg.velo$velocity,keep.rownames = "gene"),
+               id.vars = "gene",
+               variable.name = "lineage_hmap",value.name = "avg_velo")
 
+avg.velo[lineage_hmap%in%c("HSC","MPP/LMPP")][order(-avg_velo)][1:30]
+
+
+ggplot(res_gsea,aes(x=NES,y=-log10(pval),col=pval<0.05))+
+  geom_point(aes(size=size))+
+  scale_color_manual(values = c("grey","red")) +
+  geom_label_repel(aes(label=ifelse(pval<0.05,pathway,"")),max.overlaps = 3000)
+
+
+#by pca
+hscmpp_h<-subset(cbps_h,lineage_hmap%in%c("HSC","MPP/LMPP"))
+nrow(hscmpp_h)
+
+hscmpp_h<-ScaleData(hscmpp_h,assay = "velocity",do.scale = F,do.center = F)
+
+hscmpp_h<-RunPCA(hscmpp_h,assay = "velocity",features = unique(avg.velo$gene),reduction.name = "pca_velo")
+DimHeatmap(hscmpp_h,dims = c(1,2),cells = 500,reduction = "pca_velo",nfeatures = 50)
+TopFeatures(hscmpp_h[["pca_velo"]],dim = 1,nfeatures = 40,balanced = F)
+
+#driver genes ~~Top-likelihood genes
+#=> assume Driver genes because display pronounced dynamic behavior
+genes_mtd<-fread("outputs/20-RNA_velocity/cbps_hto_dynamical_genes_metadata.csv")
+genes_mtd<-genes_mtd[!is.na(fit_likelihood)]
+genes_mtd#1742
+head(genes_mtd[order(-fit_likelihood)],20)
+head(genes_mtd[order(-fit_likelihood),.(Gene,fit_likelihood)],50)
+#gsea regulons
+library(fgsea)
+regulons<-fread("outputs/16-GRN_final/tf_target_interactions.csv")
+
+genes_rank<-genes_mtd$fit_likelihood
+names(genes_rank)<-genes_mtd$Gene
+genes_rank<-sort(genes_rank,decreasing = T)
+head(genes_rank)
+tail(genes_rank)
+
+res_gsea<-fgsea(pathways=split(regulons$target,regulons$tf),
+      stats=genes_rank,scoreType = "pos")
+res_gsea[order(pval)][1:30] #EGR1, and KLF2, JUN in top5!
+
+res_gsea[,size.regulon:=length(split(regulons$target,regulons$tf)[[pathway]]),by="pathway"]
+
+
+fwrite(res_gsea,fp(out,"res_gsea_dynagenes_regulons_filtered.csv.gz"))
+
+#fig
+lead_genes<-res_gsea[pathway=="KLF2"]$leadingEdge[[1]]
+length(lead_genes)#63
+regulons[tf=="KLF2"]#188
+res[gene%in%lead_genes]
+
+
+
+#DIFF bias####
 #cell level
 ggplot(mtdff[lineage_hmap%in%lins])+
   geom_boxplot(aes(x=lineage_hmap,y=pseudo_bias,fill=group))+
