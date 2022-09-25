@@ -942,6 +942,8 @@ saveRDS(cbls_stim,fp(out,"cbls_stim.rds"))
 
 #EFFECT of STIMULATION ####
 #2h stim vs 2h nostim
+
+#global transcription
 unique(cbls_stim$condition)
 res<-data.table(FindMarkers(cbls_stim,group.by="condition",ident.1="stim_2h"),keep.rownames = "gene")
 res[avg_log2FC>0][1:40]
@@ -950,6 +952,7 @@ table(res[p_val_adj<0.001]$avg_log2FC>0)
 #   514   281 
 res[p_val_adj<0.001&avg_log2FC>0]$gene
 
+#lineage spe transcription
 res_hsc<-data.table(FindMarkers(cbls_stim,
                                 group.by="condition",
                                 ident.1="stim_2h",

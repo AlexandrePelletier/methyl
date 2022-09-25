@@ -40,7 +40,7 @@ sicbl_list<-lapply(sicbl_list,"SCTransform")
 
 #KLF2 downregulation?
 sicbl<-merge(sicbl_list[[1]],sicbl_list[[2]])
-sicbl#3649 feature
+sicbl#3649 samples
 
 VlnPlot(sicbl,features = "KLF2")
 
@@ -288,11 +288,41 @@ genes_rank<-sort(genes_rank,decreasing = T)
 head(genes_rank)
 tail(genes_rank)
 
-res_gsea<-fgsea(pathways=split(regulons$target,regulons$tf),
+res_gsea<-fgsea(pathways=split(regulons[!(extended)]$target,regulons[!(extended)]$tf),
       stats=genes_rank,scoreType = "std")
-res_gsea[order(pval)][1:30] #CTCF, ELF1, but alsoKLF2!
+res_gsea[order(pval)][1:10] #CTCF, ELF1, but also EGR1 and KLF2!
+#     pathway        pval       padj   log2err         ES       NES size                                  leadingEdge
+#  1:   STAT3 0.001052680 0.04762403 0.4550599 -0.4758871 -1.728147   45      DDX17,ETV6,TNRC18,STAT3,RUNX1,HOXB4,...
+#  2:    KLF2 0.001322890 0.04762403 0.4550599 -0.4011175 -1.574541   82          PLCG2,ARF6,RBM39,UBC,EIF1,HLA-C,...
+#  3:   CREB1 0.004052747 0.09726593 0.4070179 -0.3037233 -1.310681  315 ATP1B3,SRSF6,TMSB4X,TRA2A,AKIRIN2,YTHDC2,...
+#  4:    JUND 0.005560023 0.10008041 0.4070179 -0.3885119 -1.525335   81     SRSF6,H3F3B,AKIRIN2,ARF6,G3BP2,TRA2B,...
+#  5:   NR3C1 0.006972387 0.10040237 0.4070179 -0.7209525 -1.665708    7                  TRA2B,FBXW7,TCF4,CCDC6,UBL3
+#  6:    JUNB 0.012517858 0.15021430 0.3807304 -0.3525416 -1.397748   94      EMP3,ANXA5,H3F3B,AKIRIN2,CD44,RAB8B,...
+#  7:  HOXA10 0.020784540 0.21378384 0.3524879 -0.3490524 -1.392606   97       HOXB3,SSBP2,MEIS1,SOCS2,RUNX1,SVIL,...
+#  8:   NFKB2 0.025743153 0.21995927 0.3524879 -0.3583167 -1.399739   76         PLCG2,B2M,EMP3,S100A10,BRI3,CD59,...
+#  9:     FOS 0.027494908 0.21995927 0.2765006 -0.3520112 -1.382973   83       H3F3B,AKIRIN2,EEF1A1,SBDS,CD44,UBC,...
+# 10:     MYC 0.031762295 0.22868852 0.2572065 -0.3746260 -1.409962   60      MYL12A,S100A6,RAN,RAP2B,ZNF706,YBX1,...
+res_gsea[,size.regulon:=length(split(regulons[!(extended)]$target,regulons[!(extended)]$tf)[[pathway]]),by="pathway"]
+head(res_gsea[order(padj)],30)
 
-res_gsea[,size.regulon:=length(split(regulons$target,regulons$tf)[[pathway]]),by="pathway"]
+fwrite(res_gsea,fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz"))
+
+#with extended
+res_gsea2<-fgsea(pathways=split(regulons$target,regulons$tf),
+      stats=genes_rank,scoreType = "std")
+res_gsea2[order(pval)][1:10] #CTCF, ELF1, but also EGR1 and KLF2!
+#     pathway        pval       padj   log2err         ES       NES size                                  leadingEdge
+#  1:   STAT3 0.001052680 0.04762403 0.4550599 -0.4758871 -1.728147   45      DDX17,ETV6,TNRC18,STAT3,RUNX1,HOXB4,...
+#  2:    KLF2 0.001322890 0.04762403 0.4550599 -0.4011175 -1.574541   82          PLCG2,ARF6,RBM39,UBC,EIF1,HLA-C,...
+#  3:   CREB1 0.004052747 0.09726593 0.4070179 -0.3037233 -1.310681  315 ATP1B3,SRSF6,TMSB4X,TRA2A,AKIRIN2,YTHDC2,...
+#  4:    JUND 0.005560023 0.10008041 0.4070179 -0.3885119 -1.525335   81     SRSF6,H3F3B,AKIRIN2,ARF6,G3BP2,TRA2B,...
+#  5:   NR3C1 0.006972387 0.10040237 0.4070179 -0.7209525 -1.665708    7                  TRA2B,FBXW7,TCF4,CCDC6,UBL3
+#  6:    JUNB 0.012517858 0.15021430 0.3807304 -0.3525416 -1.397748   94      EMP3,ANXA5,H3F3B,AKIRIN2,CD44,RAB8B,...
+#  7:  HOXA10 0.020784540 0.21378384 0.3524879 -0.3490524 -1.392606   97       HOXB3,SSBP2,MEIS1,SOCS2,RUNX1,SVIL,...
+#  8:   NFKB2 0.025743153 0.21995927 0.3524879 -0.3583167 -1.399739   76         PLCG2,B2M,EMP3,S100A10,BRI3,CD59,...
+#  9:     FOS 0.027494908 0.21995927 0.2765006 -0.3520112 -1.382973   83       H3F3B,AKIRIN2,EEF1A1,SBDS,CD44,UBC,...
+# 10:     MYC 0.031762295 0.22868852 0.2572065 -0.3746260 -1.409962   60      MYL12A,S100A6,RAN,RAP2B,ZNF706,YBX1,...
+res_gsea[,size.regulon:=length(split(regulons[!(extended)]$target,regulons[!(extended)]$tf)[[pathway]]),by="pathway"]
 head(res_gsea[order(padj)],30)
 
 fwrite(res_gsea,fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz"))
@@ -313,54 +343,9 @@ ggplot(res,aes(x=avg_log2FC,y=-log10(p_val),col=gene%in%lead_genes,alpha=gene%in
   theme(legend.position = "bottom")
 
 ggplot(res_gsea,aes(x=NES,y=-log10(pval),col=padj<0.05))+
-  geom_point(aes(size=size))+
+  geom_point(aes(size=size.regulon))+
   scale_color_manual(values = c("grey","red")) +
   geom_label_repel(aes(label=ifelse(padj<0.05,pathway,"")))
-
-#most statistically different
-res[,score:=rank(-log10(p_val))]
-
-genes_rank<-res$score
-names(genes_rank)<-res$gene
-genes_rank<-sort(genes_rank,decreasing = T)
-res_gsea<-fgsea(pathways=split(regulons$target,regulons$tf),
-      stats=genes_rank,scoreType = "pos")
-res_gsea[order(pval)][1:10] #KLF2 in top5!
-lead_genes<-res_gsea[pathway=="KLF2"]$leadingEdge[[1]]
-length(lead_genes)#63
-regulons[tf=="KLF2"]#188
-res[gene%in%lead_genes]
-#        gene        p_val  avg_log2FC pct.1 pct.2    p_val_adj  score
-#  1:    PLCG2 3.568329e-08 -0.55100628 1.000 1.000 0.0006284185 9886.0
-#  2:     ARF6 1.380192e-04 -0.57357839 0.688 0.877 1.0000000000 9767.0
-#  3:    RBM39 4.257180e-04 -0.36311841 1.000 1.000 1.0000000000 9697.0
-#  4:      UBC 4.371398e-03 -0.54468093 1.000 1.000 1.0000000000 9409.0
-#  5:     PIM3 9.075945e-03 -0.27463334 0.584 0.754 1.0000000000 9230.0
-#  6:     EIF1 9.245998e-03 -0.29452590 1.000 1.000 1.0000000000 9224.0
-#  7:    HLA-C 9.907604e-03 -0.29355551 1.000 1.000 1.0000000000 9195.0
-#  8:     RHOC 1.008053e-02 -0.47747807 0.545 0.692 1.0000000000 9192.0
-#  9:   TIPARP 1.144470e-02 -0.37914383 0.831 0.938 1.0000000000 9151.0
-# 10:    HLA-E 1.182079e-02 -0.31530221 1.000 1.000 1.0000000000 9139.0
-# 11:    ITM2B 2.297621e-02 -0.19986792 1.000 1.000 1.0000000000 8854.0
-# 12:     KLF7 2.804374e-02 -0.29071238 0.117 0.262 1.0000000000 8744.0
-# 13:    SRSF5 3.498782e-02 -0.20521728 1.000 1.000 1.0000000000 8607.0
-# 14:    RAB21 4.437118e-02 -0.37111073 0.701 0.785 1.0000000000 8430.0
-# 15:     BTG1 4.707513e-02 -0.25927669 0.935 0.954 1.0000000000 8374.0
-# 16:    KLF10 5.571895e-02 -0.36198832 0.234 0.354 1.0000000000 8258.0
-# 17:     LMNA 5.767270e-02 -0.71975674 0.325 0.462 1.0000000000 8215.0
-# 18:      JUN 5.969008e-02 -0.30538674 0.208 0.338 1.0000000000 8184.0
-# 19:     WSB1 6.454420e-02 -0.29351328 0.818 0.831 1.0000000000 8102.0
-# 20:     SKIL 7.129324e-02 -0.29081163 0.805 0.846 1.0000000000 7999.0
-# 21:    ARL4C 8.344200e-02 -0.31153292 0.130 0.246 1.0000000000 7848.0
-# 22:    SRSF7 8.518643e-02 -0.19642878 0.987 1.000 1.0000000000 7825.0
-# 23:     CNN3 8.867850e-02 -0.25849391 0.662 0.692 1.0000000000 7773.0
-# 24:     TOB1 9.175405e-02  0.09888302 0.104 0.031 1.0000000000 7732.5
-# 25:     UBL3 9.703169e-02 -0.24441873 0.429 0.523 1.0000000000 7662.0
-res[p_val<max(res[gene%in%lead_genes]$p_val)] #5k plus petit
-
-res_gsea[,size.regulon:=length(split(regulons$target,regulons$tf)[[pathway]]),by="pathway"]
-fwrite(res_gsea,fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_padj_rank.csv.gz"))
-fread(fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_padj_rank.csv.gz"))[order(pval)]
 
 
 #impact on subpop
@@ -434,3 +419,114 @@ mtd[,q10pseudo:=quantile(pseudotime,0.1),by="sirna"]
 ggplot(unique(mtd,by="sirna"))+geom_col(aes(x=sirna,y=q10pseudo,fill=sirna))
 
 saveRDS(sicbls,fp(out,"sicbls2.rds"))
+
+
+#figures
+
+table(sicbls$sirna)
+# CTRL KLF2 
+# 1533 2116 
+
+round(table(sicbls$cell_type2)/ncol(sicbls) * 100)
+          # HSC           MPP       MPP-Ery           EMP ErP/GMP-cycle 
+          #   4             9            21            16             7 
+          # GMP          LMPP           CLP 
+          #   4            36             4 
+
+#vs unincubated cells 
+mtdo<-fread("outputs/06-integr_singlecell_cbps/metadata_cbps_filtered.csv.gz")
+round(table(mtdo$lineage_hmap)/nrow(mtd) * 100)
+
+
+#subpop shift
+
+mtdsi<-data.table(sicbls@meta.data)
+mtdsi[,pct.hscmpp:=sum(cell_type2%in%c("HSC","MPP"))/.N,by="sirna"]
+
+ggplot(unique(mtdsi,by="sirna"))+geom_col(aes(x=sirna,y=pct.hscmpp,fill=sirna))
+chisq.test(c(sum(mtdsi$sirna=="KLF2"&mtdsi$cell_type2%in%c("HSC","MPP")),sum(mtdsi$sirna=="KLF2"&!(mtdsi$cell_type2%in%c("HSC","MPP")))),
+                                   p = c(sum(mtdsi$sirna=="CTRL"&mtdsi$cell_type2%in%c("HSC","MPP")),sum(mtdsi$sirna=="CTRL"&!(mtdsi$cell_type2%in%c("HSC","MPP")))),
+                                   rescale.p = T)$p.value #0.0035
+
+chisq.test(c(sum(mtdsi$sirna=="KLF2"&mtdsi$cell_type2%in%c("HSC","MPP")),sum(mtdsi$sirna=="KLF2"&!(mtdsi$cell_type2%in%c("HSC","MPP")))),
+                                   y = c(sum(mtdsi$sirna=="CTRL"&mtdsi$cell_type2%in%c("HSC","MPP")),sum(mtdsi$sirna=="CTRL"&!(mtdsi$cell_type2%in%c("HSC","MPP")))),
+                                   )$p.value #0.0035
+
+#degs regulons KLF2
+regulons[tf=="KLF2"&!(extended)]
+DefaultAssay(sicbls)<-"SCT"
+
+res_klf2<-data.table(FindMarkers(sicbls,subset.ident = "HSC",
+            ident.1 = "KLF2",ident.2 = "CTRL",group.by = "sirna",
+            features =regulons[tf=="KLF2"&!(extended)]$target,
+            logfc.threshold = 0,test.use = "t"),
+            keep.rownames = "gene")
+
+res_klf2[,padj:=p.adjust(p_val,method = 'BH')]
+
+res_klf2[padj<0.05]
+#     gene        p_val avg_log2FC pct.1 pct.2   p_val_adj         padj
+# 1: PLCG2 4.280812e-07 -0.5510063 1.000 1.000 0.007538939 3.510266e-05
+# 2:  ARF6 9.416765e-05 -0.5735784 0.688 0.877 1.000000000 3.860874e-03
+# 3: RBM39 8.927806e-04 -0.3631184 1.000 1.000 1.000000000 2.112964e-02
+# 4:   UBC 1.030714e-03 -0.5446809 1.000 1.000 1.000000000 2.112964e-02
+res_klf2[p_val<0.05]
+#      gene        p_val avg_log2FC pct.1 pct.2   p_val_adj         padj
+#  1:  PLCG2 4.280812e-07 -0.5510063 1.000 1.000 0.007538939 3.510266e-05
+#  2:   ARF6 9.416765e-05 -0.5735784 0.688 0.877 1.000000000 3.860874e-03
+#  3:  RBM39 8.927806e-04 -0.3631184 1.000 1.000 1.000000000 2.112964e-02
+#  4:    UBC 1.030714e-03 -0.5446809 1.000 1.000 1.000000000 2.112964e-02
+#  5:  HLA-E 3.503152e-03 -0.3153022 1.000 1.000 1.000000000 5.745170e-02
+#  6:   EIF1 6.374270e-03 -0.2945259 1.000 1.000 1.000000000 8.011478e-02
+#  7:   RHOC 7.533594e-03 -0.4774781 0.545 0.692 1.000000000 8.011478e-02
+#  8: TIPARP 7.816077e-03 -0.3791438 0.831 0.938 1.000000000 8.011478e-02
+#  9:  HLA-C 1.382889e-02 -0.2935555 1.000 1.000 1.000000000 1.259966e-01
+# 10:  ITM2B 3.388506e-02 -0.1998679 1.000 1.000 1.000000000 2.494340e-01
+# 11:  KLF10 3.677988e-02 -0.3619883 0.234 0.354 1.000000000 2.494340e-01
+# 12:   LMNA 4.014808e-02 -0.7197567 0.325 0.462 1.000000000 2.494340e-01
+# 13:  SRSF7 4.150240e-02 -0.1964288 0.987 1.000 1.000000000 2.494340e-01
+# 14:  SRSF5 4.468353e-02 -0.2052173 1.000 1.000 1.000000000 2.494340e-01
+# 15:  RAB21 4.562816e-02 -0.3711107 0.701 0.785 1.000000000 2.494340e-01
+#not work
+
+#res unsupervised analysis
+res[p_val_adj<0.05]
+
+res_gsea<-fread("outputs/25-siRNAs_KLF2_cbl/res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz")
+res_gsea[order(pval)]
+res_gsea[,top10:=rank(pval)<11]
+ggplot(res_gsea,aes(x=NES,y=-log10(pval),col=padj<0.1))+
+  geom_point(aes(size=size.regulon))+
+  scale_color_manual(values = c("grey","red")) +
+  geom_label_repel(aes(label=ifelse(top10,pathway,"")))
+
+
+#aucell regulons
+  library(AUCell)
+  library(SCENIC)
+  source("scripts/utils/scenic_utils.R")
+
+cells_rankings <- AUCell_buildRankings(as.matrix(sicbls@assays$RNA@counts),nCores = 20)
+regulons_list<-split(regulons[!(extended)]$target,regulons[!(extended)]$tf)
+cells_AUC <- AUCell_calcAUC(regulons_list, cells_rankings, aucMaxRank=nrow(cells_rankings)*0.05)
+auc_mat<-getAUC(cells_AUC)
+sicbls@assays[["TF_AUC"]] <- CreateAssayObject(auc_mat)
+DefaultAssay(sicbls)<-"TF_AUC"
+
+saveRDS(sicbls,fp(out,"sicbls2_with_regulons_activity.rds"))
+
+FeaturePlot(sicbls,"KLF2",min.cutoff = "q10")
+
+VlnPlot(sicbls,"KLF2",group.by = "cell_type2")+legend(x="cell_type",y="Regulon activity")
+
+VlnPlot(sicbls,"KLF2",group.by = "cell_type2",split.by = "sirna")
+
+
+res<-Reduce(rbind,lapply(levels(sicbls), function(ct){
+  return(data.table(FindMarkers(sicbls,subset.ident = ct,logfc.threshold = 0,
+                                group.by = "sirna",ident.1 = "KLF2"),keep.rownames = "regulon")[,cell_type2:=ct])
+}))
+
+res[p_val_adj<0.05]
+res[p_val<0.05&cell_type2=="HSC"]
+
