@@ -12,6 +12,9 @@ library(Signac)
 #I) BULK OCRs####
 #1)DMCs overlap in OCR ?
 atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atac1-4_merged_qc.rds")
+
+table(atacs$)
+
 nrow(atacs) #126925
 ocrs<-data.table(peaks=rownames(atacs))
 ocrs[,chr:=str_extract(peaks,"chr[0-9XY]+"),]
@@ -380,6 +383,28 @@ VlnPlot(atacs,"prediction.score.max",group.by="predicted.id")
 
 #2) compute lin OCRs
 atacs<-readRDS(fp(out,"cbps_atacs.rds"))
+table(atacs$predicted.id)
+     #  18      B cell          DC Erythro-Mas         HSC      LT-HSC    Lymphoid       Mk/Er    MPP/LMPP     Myeloid 
+     #     52          77          64         656        1342          27         531           7        5721         207 
+     # T cell 
+     #     49 
+atacs$group<-ifelse(str_detect(atacs$dataset,"1|3"),"ctrl","lga")
+
+
+table(atacs$predicted.id,atacs$group)
+  #           ctrl  lga
+  # 18            13   39
+  # B cell        36   41
+  # DC            17   47
+  # Erythro-Mas  291  365
+  # HSC          498  844
+  # LT-HSC        14   13
+  # Lymphoid     175  356
+  # Mk/Er          0    7
+  # MPP/LMPP    2126 3595
+  # Myeloid       68  139
+  # T cell        14   35
+
 #need macs2
 
 renv::use_python()

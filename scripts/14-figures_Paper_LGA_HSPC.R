@@ -1382,6 +1382,8 @@ mtd[,n.cells:=.N,"sample_hto"]
 mtd[,n.cells.lin:=.N,c("sample_hto","lineage_hmap")]
 mtd[,pct.lin:=.N/n.cells,c("sample_hto","lineage_hmap")]
 mtsl<-unique(mtd[lineage_hmap%in%c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","Lymphoid")],by=c("sample_hto","lineage_hmap"))
+
+
 mtsl$lineage_hmap<-factor(mtsl$lineage_hmap,levels = c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","Lymphoid"))
 
 #rm outlyers

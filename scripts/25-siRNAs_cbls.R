@@ -149,6 +149,7 @@ for (i in 1:length(sicbl_list)) {
 # Merge the queries
 sicbls <- merge(sicbl_list[[1]], sicbl_list[[2]])
 saveRDS(sicbls,fp(out,"sicbls2.rds"))
+sicbls<-readRDS(fp(out,"sicbls2.rds"))
 
 # unsupervised clustering
 features<-SelectIntegrationFeatures(sicbl_list, nfeatures = 3000)
@@ -212,10 +213,12 @@ newids<-c(
   "9"="CLP"
 )
 sicbls<-RenameIdents(sicbls,newids)
-DimPlot(sicbls, reduction = "umap",  label = TRUE, label.size = 4) 
+DimPlot(sicbls, reduction = "umap",  label = TRUE,label.size = 5) 
 FeaturePlot(sicbls,features =c("MPO","LTB",'GATA2'),min.cutoff = "q10")#ok
 
 sicbls$cell_type2<-Idents(sicbls)
+
+DimPlot(sicbls, reduction = "umap",  label = TRUE, label.size = 4) 
 
 
 #KLF2 reudction in MPP ?
@@ -262,7 +265,7 @@ lapply(split(resgos,by = "source"),head)
 
 #save
 saveRDS(sicbls,fp(out,"sicbls2.rds"))
-fwrite(degs,fp(out,"degs_siklf2_vs_ctrl_hsc.csv.gz"))
+fwrite(res,fp(out,"degs_siklf2_vs_ctrl_hsc.csv.gz"))
 fwrite(resgos,fp(out,"res_gost_degs_siklf2_vs_ctrl_hsc.csv.gz"))
 
 #enrichment for regulons KLF2
@@ -271,12 +274,15 @@ intersect(regulons[tf=="KLF2"]$target,res[p_val_adj<0.05]$gene) # "PLCG2" 1/32 d
 #donc nop
 
 #gsea lik
+res<-fread(fp(out,"degs_siklf2_vs_ctrl_hsc.csv.gz"))
 
 
-res_gos<-gost(query = res[order(-log10(p_val)*sign(avg_log2FC))]$gene,organism = "hsapiens",ordered_query = T)
+res_gos<-gost(query = res[order(-log10(p_val)*sign(avg_log2FC))]$gene,custom_bg=res[order(-log10(p_val)*sign(avg_log2FC))]$gene,organism = "hsapiens",ordered_query = T)
+resgos<-data.table(res_gos$result)
+
+resgos[p_value<0.001&str_detect(source,"GO:BP")]
 gprofiler2::gostplot(res_gos) 
 
-resgos<-data.table(res_gos$result)
 resgos[p_value<1e-15][source=="TF"][1:20]
 #gsea with regulons
 library(fgsea)
@@ -307,6 +313,8 @@ head(res_gsea[order(padj)],30)
 
 fwrite(res_gsea,fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz"))
 
+res_gsea<-fread(fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz"))
+
 #with extended
 res_gsea2<-fgsea(pathways=split(regulons$target,regulons$tf),
       stats=genes_rank,scoreType = "std")
@@ -329,6 +337,8 @@ fwrite(res_gsea,fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.
 
 
 #fig
+res_gsea<-fread(fp(out,"res_gsea_degs_klf2_hsc_regulons_filtered_sign_p_val.csv.gz"))
+
 lead_genes<-res_gsea[pathway=="KLF2"]$leadingEdge[[1]]
 length(lead_genes)#63
 regulons[tf=="KLF2"]#188
@@ -342,13 +352,23 @@ ggplot(res,aes(x=avg_log2FC,y=-log10(p_val),col=gene%in%lead_genes,alpha=gene%in
   theme_minimal() +
   theme(legend.position = "bottom")
 
-ggplot(res_gsea,aes(x=NES,y=-log10(pval),col=padj<0.05))+
+ggplot(res_gsea,aes(x=NES,y=-log10(pval),col=padj<0.1))+
   geom_point(aes(size=size.regulon))+
   scale_color_manual(values = c("grey","red")) +
-  geom_label_repel(aes(label=ifelse(padj<0.05,pathway,"")))
+  geom_label_repel(aes(label=ifelse(padj<0.1,pathway,"")))+theme_minimal()
 
 
 #impact on subpop
+table(sicbls$cell_type2,sicbls$sirna)
+  #               CTRL KLF2
+  # HSC             65   77
+  # MPP            162  178
+  # MPP-Ery        312  449
+  # EMP            247  319
+  # ErP/GMP-cycle   99  142
+  # GMP             55   82
+  # LMPP           534  783
+  # CLP             59   86
 mtd<-data.table(sicbls@meta.data,keep.rownames = "bc")
 mtd[,n.sample:=.N,by="sirna"]
 

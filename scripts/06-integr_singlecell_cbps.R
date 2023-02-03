@@ -772,6 +772,7 @@ cbps <- merge(cbps_list[[1]], cbps_list[2:length(cbps_list)],merge.dr = c("ref.p
 p<-DimPlot(cbps, reduction = "ref.umap", group.by =  "predicted.cell_type", label = TRUE, repel = TRUE, label.size = 3) + NoLegend()
 ggsave(fp(out,"predicted_cell_type.png"),plot=p)
 
+
 DimPlot(cbps, reduction = "ref.umap", group.by =  "predicted.lineage", label = TRUE, repel = TRUE, label.size = 3) + NoLegend()
 
 

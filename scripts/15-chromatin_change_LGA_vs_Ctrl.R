@@ -41,6 +41,10 @@ FeaturePlot(
 )
 VlnPlot(atacs,motifs)
 head(atacs[[]])
+
+
+#[A commenter]
+
 atacs$group<-ifelse(str_detect(atacs$dataset,"1|3"),"ctrl","lga")
 differential.activity <- FindMarkers(
   object = atacs,
@@ -96,6 +100,7 @@ hsc_lga_tf_up<-FindMotifs(object = atacs,
            assay = "lin_peaks",
            features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC>0.25]$peak,
            background = peaks_5pct)
+
 hsc_lga_tf_down<-FindMotifs(object = atacs,
            assay = "lin_peaks",
            features = peaks_hsc_lga_xy[p_val_adj<0.001&avg_log2FC<(-0.25)]$peak,
@@ -124,6 +129,8 @@ peaks_hsc_genes<-data.table(ClosestFeature(atacs,regions =peaks_dt[lineage=="HSC
 fwrite(peaks_hsc_genes,fp(out,"peaks_hsc_genes_anno.csv.gz"))
 
 #merge with res_degs
+peaks_hsc_genes<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+
 res_degs<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")
 peaks_hsc_genes[,gene:=gene_name]
 peaks_expr<-merge(peaks_hsc_genes,res_degs[lineage=="HSC"],by = "gene")
@@ -168,6 +175,58 @@ res_or_da_peaks_dmcs_degs<-OR3(da_peaks_list,
                     overlap_column = F) 
 
 fwrite(res_or_da_peaks_dmcs_degs,fp(out,"res_da_peaks_enrichment_in_dmcs_degs_hsc_peaks.csv"))
+
+
+#edit 16-11-2022
+#term list : peaks DMCs/DA
+atacs<-readRDS("outputs/14-DMCs_atac_integr/cbps_atacs.rds")
+atacs$group<-ifelse(str_detect(atacs$dataset,"1|3"),"ctrl","lga")
+
+atacs[["lin_peaks"]]<-readRDS("outputs/14-DMCs_atac_integr/cbps_lin_spe_peaks_assay.rds")
+Idents(atacs)<-"predicted.id"
+fcs<-FoldChange(atacs,subset.ident = "HSC",group.by = "group",ident.1 ="lga",ident.2 = "ctrl" ,assay = "lin_peaks")
+peaks_5pct<-rownames(fcs)[fcs$pct.1>=0.05|fcs$pct.2>=0.05]
+
+peaks_hsc_lga_xy<-fread(fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))
+
+
+meth_da_peaks_list<-list(CpGs=unique(peaks_meth$peaks),
+                         DMCs=unique(peaks_meth[P.Value<0.001&abs(logFC)>25]$peaks),
+                         tested_peaks=peaks_5pct,
+                         DA_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&abs(avg_log2FC)>0.25]$peak),
+                         down_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak),
+                         up_peaks=unique(peaks_hsc_lga_xy[p_val_adj<0.05&avg_log2FC>0.25]$peak),
+                         DMCs_down_peaks=intersect(unique(peaks_meth[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(peaks_hsc_lga_xy[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak)))
+lapply(meth_da_peaks_list, length)
+lapply(meth_da_peaks_list, head)
+
+#query list : DEGs up dn
+degs_peaks_list<-list(DEGs=unique(peaks_expr[padj<0.05&abs(log2FoldChange)>0.5]$query_region),
+                      upreg=unique(peaks_expr[padj<0.05&log2FoldChange>0.5]$query_region),
+                      downreg=unique(peaks_expr[padj<0.05&log2FoldChange<(-0.5)]$query_region)
+)
+lapply(degs_peaks_list, length)
+lapply(degs_peaks_list, head)
+
+#background : expressed genes
+expressed=unique(peaks_expr$query_region)
+
+
+length(expressed)#64k
+background<-expressed
+length(background) #64k/215k peaks 
+head(background)
+
+res_or_deg_peaks_dmcs_dap<-OR3(degs_peaks_list,
+                    meth_da_peaks_list,
+                    background = background,
+                    overlap_column = F) 
+
+fwrite(res_or_deg_peaks_dmcs_dap,fp(out,"res_degs_peaks_enrichment_in_dmcs_da_hsc_peaks.csv"))
+
+#end edit 16-11-22
+
 
 #KLF2 Open Chrine DA ? 
 peaks_hsc_lga_xy<-fread(fp(out,"differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz"))

@@ -9,9 +9,15 @@ matrix_path<-"~/RUN/Run_538_10x_standard/Output/cellranger_count/run_538_10x-cbp
 cbp<-Read10X(matrix_path)
 
 cbp<-CreateSeuratObject(cbp,project = batch)
+head(cbp@meta.data)
+
 cbp<-PercentageFeatureSet(cbp,pattern = "MT-",col.name = "percent.mt")
+
+#QC
 VlnPlot(cbp,c("nCount_RNA","nFeature_RNA","percent.mt")) 
 cbp<-subset(cbp,nCount_RNA<20000&nFeature_RNA<4000&nFeature_RNA>200&percent.mt<25)
+
+cbp # 4520
 
 
 #DEMultiplex
@@ -40,7 +46,19 @@ table(cbp@meta.data$sample)
 # ctrlF541  Doublet  lgaM526 Negative 
 # 2438      493     1381      208 
 
+#check Cycle cellulaire
+cbp<-SCTransform(cbp)
+cbp<-CellCycleScoring(cbp,s.features = cc.genes$s.genes,
+                                 g2m.features = cc.genes$g2m.genes,
+                                 set.ident = TRUE,
+                                 search=TRUE)
+head(cbp@meta.data)
 
+cbp<-RunPCA(cbp)
+cbp<-RunUMAP(cbp,dims = 1:10)
+
+DimPlot(cbp,group.by = "Phase")
+FeaturePlot(cbp,"percent.mt")
 
 saveRDS(subset(cbp,sample=="ctrlF541"),fp(out,"ctrlF541.rds"))
 

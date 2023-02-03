@@ -845,10 +845,14 @@ ggplot(cbls_stim@meta.data)+geom_bar(aes(x=multi_clusters,fill=lineage_hmap),pos
 
 DefaultAssay(cbls_stim)<-"SCT"
 FeaturePlot(cbls_stim,features = c("EGR1",'SOCS3'),
-            reduction = "multi_humap")
+            reduction = "multi_humap",label=T)
+FeaturePlot(cbls_stim,features = c("AVP",'DUSP2'),
+            reduction = "multi_humap",label=T)
 
 FeaturePlot(cbls_stim,features = c('MPO',"CEBPA"),reduction = "multi_humap")
-FeaturePlot(cbls_stim,features = c('LTB',"CD99"),reduction = "multi_humap")
+FeaturePlot(cbls_stim,features = c('LTB',"CD99"),reduction = "multi_humap",label=T)
+
+FeaturePlot(cbls_stim,features = c('GATA2',"GATA1"),reduction = "multi_humap",label=T)
 
 new.idents<-c(
   "0" = "HSC",
@@ -942,22 +946,59 @@ saveRDS(cbls_stim,fp(out,"cbls_stim.rds"))
 
 #EFFECT of STIMULATION ####
 #2h stim vs 2h nostim
+cbls<-readRDS("outputs/27-multiomics_cbl_stim/cbls_stim.rds")
+DimPlot(cbls,reduction = "multi_humap",label=T)
+DimPlot(cbls,reduction = "multi_humap",group.by="Phase",label=T)
 
-#global transcription
-unique(cbls_stim$condition)
-res<-data.table(FindMarkers(cbls_stim,group.by="condition",ident.1="stim_2h"),keep.rownames = "gene")
+#diff of subpop ?####
+ggplot(cbls@meta.data)+geom_bar(aes(x=condition,
+                                    fill=ident.2),position = "fill")
+
+mtds<-data.table(cbls@meta.data,keep.rownames = "bc")
+mtds[,n.sample:=.N,by="condition"]
+
+mtds[,pct.ct:=.N/n.sample,by=c("condition","ident.2")]
+
+levels(cbls)
+FeaturePlot(cbls,c("ID1","AVP","SOCS3","EGR1"),min.cutoff = "q10",max.cutoff = "q95",reduction = "multi_humap",order=T,label=T)
+FeaturePlot(cbls,c("CDK6"),min.cutoff = "q10",max.cutoff = "q95",reduction = "multi_humap",order=T,label=T)
+FeaturePlot(cbls,c("MLLT3"),min.cutoff = "q10",max.cutoff = "q95",reduction = "multi_humap",order=T,label=T)
+FeaturePlot(cbls,c("EGR1"),min.cutoff = "q10",max.cutoff = "q95",reduction = "multi_humap",order=T,label=T)
+FeaturePlot(cbls,c("percent.mt"),reduction = "multi_humap",label=T)
+
+FeaturePlot(cbls,c("CD8"),min.cutoff = "q10",max.cutoff = "q95",reduction = "multi_humap",order=T,label=T)
+res<-FindMarkers(cbls,ident.1 = "T cell",ident.2 = c("CD4+ T cell","CD4+ T cell 2"))
+res[res$p_val_adj<0.05,]
+lvls<-c("HSC","HSC-Mk","MPP/LMPP","Lymphoid","Myeloid","Erythro-Mas","DC Prog")
+mtdsf<-mtds[ident.2%in%lvls]
+
+mtdsf[,lineage:=factor(ident.2,levels = lvls)]
+ggplot(unique(mtdsf,by=c("condition","lineage")))+
+  geom_col(aes(x=lineage,y=pct.ct,fill=condition),position='dodge')
+
+
+#global transcription####
+unique(cbls$condition)
+res<-data.table(FindMarkers(cbls,group.by="condition",ident.1="stim_2h"),keep.rownames = "gene")
 res[avg_log2FC>0][1:40]
 table(res[p_val_adj<0.001]$avg_log2FC>0)
 # FALSE  TRUE 
 #   514   281 
 res[p_val_adj<0.001&avg_log2FC>0]$gene
 
-#lineage spe transcription
-res_hsc<-data.table(FindMarkers(cbls_stim,
+#lineage spe transcription####
+res<-Reduce(rbind,lapply(lvls,function(ct)data.table(FindMarkers(cbls,
                                 group.by="condition",
                                 ident.1="stim_2h",
-                                subset.ident = "HSC"),keep.rownames = "gene")
-res_hsc[avg_log2FC>0][1:40]
+                                subset.ident = ct),keep.rownames = "gene")[,lineage:=ct]))
+
+table(res[p_val_adj<0.05]$lineage)
+  # DC Prog Erythro-Mas         HSC      HSC-Mk    Lymphoid    MPP/LMPP     Myeloid 
+  #       752         495         581          52         414         670         396 
+res[,lineage:=factor(lineage,levels = lvls)]
+ggplot(res[p_val_adj<0.05])+geom_bar(aes(x=lineage,fill=avg_log2FC>0),position = "dodge")
+res_hsc<-res[lineage=="HSC"]
+res_hsc[avg_log2FC>0&p_val_adj<0.05]
 # BHLHE40 4.450740e-68  1.6303004 0.808 0.195 1.004443e-63
 #  2:     IL2RA 7.826327e-61  2.1002804 0.683 0.102 1.766246e-56
 #  3:    IL1RAP 3.002129e-59  1.5955557 0.727 0.132 6.775204e-55
@@ -999,7 +1040,7 @@ res_hsc[avg_log2FC>0][1:40]
 # 39:   LAPTM4B 8.119249e-26  0.8907663 0.797 0.444 1.832352e-21
 # 40:     RRAS2 1.962653e-25  0.8495764 0.720 0.369 4.429315e-21
 #          gene        p_val avg_log2FC pct.1 pct.2    p_val_adj
-table(res_hsc[p_val_adj<0.001]$avg_log2FC>0)
+table(res_hsc[p_val_adj<0.05]$avg_log2FC>0)
 # FALSE  TRUE 
 #   202   187 
 
@@ -1045,83 +1086,90 @@ res_hsc[p_val_adj<0.001&avg_log2FC>0]$gene
 
 res_hsc[p_val_adj<0.001&avg_log2FC<0]$gene
 
-fwrite(res_hsc,fp(out,'res_hsc_stim_vs_no_stim.csv.gz'))
+fwrite(res,fp(out,'res_lineage_stim_vs_no_stim.csv.gz'))
 
 #enrichment for which regulons ?
 regulons<-fread("outputs/10-SCENIC/regulons.csv")
 
-hsc_unstim<-colnames(cbls_stim)[cbls_stim$condition=="no_stim"&cbls_stim$ident.2=="HSC"]
+hsc_unstim<-colnames(cbls)[cbls$condition=="no_stim"&cbls$ident.2=="HSC"]
 length(hsc_unstim) #401
-hsc_stim<-colnames(cbls_stim)[cbls_stim$condition=="stim_2h"&cbls_stim$ident.2=="HSC"]
+hsc_stim<-colnames(cbls)[cbls$condition=="stim_2h"&cbls$ident.2=="HSC"]
 length(hsc_stim) #271
 
-genes_express_hsc<-rownames(cbls_stim)[rowSums(cbls_stim@assays$RNA[,hsc_unstim]>0)>0.1*length(hsc_unstim)|rowSums(cbls_stim@assays$RNA[,hsc_stim]>0)>0.1*length(hsc_stim)]
+genes_express_hsc<-rownames(cbls)[rowSums(cbls@assays$RNA[,hsc_unstim]>0)>0.1*length(hsc_unstim)|rowSums(cbls@assays$RNA[,hsc_stim]>0)>0.1*length(hsc_stim)]
 length(genes_express_hsc) #7867
-res<-OR3(querys = res_hsc[p_val_adj<0.001&avg_log2FC>0]$gene,
+res<-OR3(querys = res_hsc[p_val_adj<0.05&avg_log2FC>0]$gene,
          terms_list = split(regulons$gene,regulons$tf),
          background = intersect(genes_express_hsc,unique(regulons$gene)))
-res[padj<0.05]
-
+res[padj<0.05][order(pval)]
+#       term term.size n.query n.overlap pct.query.overlap  precision pct.term.overlap
+#  1:    JUN        35      33        13        0.39393939 0.39393939        0.3714286
+#  2:   FOSB        19      33        10        0.30303030 0.30303030        0.5263158
+#  3: ARID5A        10      33         7        0.21212121 0.21212121        0.7000000
+#  4:    FOS        32      33        10        0.30303030 0.30303030        0.3125000
+#  5:   JUNB        40      33        11        0.33333333 0.33333333        0.2750000
+#  6:   BCL3        26      33         9        0.27272727 0.27272727        0.3461538
+#  7:  NFKB1         9      33         5        0.15151515 0.15151515        0.5555556
+#  8:   JUND        56      33        11        0.33333333 0.33333333        0.1964286
+#  9:   ATF3        26      33         7        0.21212121 0.21212121        0.2692308
+# 10:  NFKB2        35      33         8        0.24242424 0.24242424        0.2285714
+# 11:   XBP1       104      33        14        0.42424242 0.42424242        0.1346154
+# 12: HOXA10        41      33         8        0.24242424 0.24242424        0.1951220
+# 13:  CREB5        10      33         4        0.12121212 0.12121212        0.4000000
+# 14:   EGR1        10      33         4        0.12121212 0.12121212        0.4000000
+# 15:   IRF9        17      33         5        0.15151515 0.15151515        0.2941176
+# 16:  STAT3        17      33         5        0.15151515 0.15151515        0.2941176
+# 17:  HOXA9        71      33        10        0.30303030 0.30303030        0.1408451
+# 18:  KLF10        21      33         5        0.15151515 0.15151515        0.2380952
+# 19:   KLF2        24      33         5        0.15151515 0.15151515        0.2083333
+# 20:  FOSL2         3      33         2        0.06060606 0.06060606        0.6666667
 fwrite(res,fp(out,"res_regulons_enrichment_in_upregulated_genes_stim_hsc2h.csv.gz"))
 
-#       term term.size n.query n.overlap pct.query.overlap  precision pct.term.overlap
-#  1: ARID5A        10      24         4        0.16666667 0.16666667       0.40000000
-#  2:   ATF3        26      24         5        0.20833333 0.20833333       0.19230769
-#  3:   BCL3        26      24         6        0.25000000 0.25000000       0.23076923
-#  4:  CREB5        10      24         3        0.12500000 0.12500000       0.30000000
-#  5:   EGR1        10      24         3        0.12500000 0.12500000       0.30000000
-#  6:    FOS        32      24         7        0.29166667 0.29166667       0.21875000
-#  7:   FOSB        19      24         7        0.29166667 0.29166667       0.36842105
-#  8:  FOSL2         3      24         2        0.08333333 0.08333333       0.66666667
-#  9: HOXA10        41      24         7        0.29166667 0.29166667       0.17073171
-# 10:  HOXA9        71      24         9        0.37500000 0.37500000       0.12676056
-# 11:   IRF9        17      24         4        0.16666667 0.16666667       0.23529412
-# 12:    JUN        35      24         9        0.37500000 0.37500000       0.25714286
-# 13:   JUNB        40      24         7        0.29166667 0.29166667       0.17500000
-# 14:  NFKB1         9      24         5        0.20833333 0.20833333       0.55555556
-# 15:  NFKB2        35      24         6        0.25000000 0.25000000       0.17142857
-# 16:  STAT3        17      24         4        0.16666667 0.16666667       0.23529412
-# 17:   XBP1       104      24        10        0.41666667 0.41666667       0.09615385
 
-res[padj<0.05][order(padj)]
+ggplot(res[padj<0.05][order(padj)])+
+  geom_point(aes(x=term,y=-log10(pval),size=n.overlap,col=fold.enrichment))+
+  coord_cartesian(ylim = c(0,10))+scale_x_discrete(limits=c(res[padj<0.05][order(pval)]$term))
 
-#GRN validation
+#GRN validation####
 #genes of EGR1/KLF2/KLF4 network
 egr1n<-unique(regulons[tf%in%c("EGR1","KLF2","KLF4")]$gene)
 
 #findLinked peaks
-DefaultAssay(cbls_stim) <- "peaks"
+DefaultAssay(cbls) <- "peaks"
 
 # first compute the GC content for each peak
-cbls_stim <- RegionStats(cbls_stim, genome = BSgenome.Hsapiens.UCSC.hg38)
+cbls <- RegionStats(cbls, genome = BSgenome.Hsapiens.UCSC.hg38)
 
 # link peaks to genes
-cbls_stim <- LinkPeaks(
-  object = cbls_stim,
+cbls <- LinkPeaks(
+  object = cbls,
   peak.assay = "peaks",
   expression.assay = "SCT",
   genes.use = egr1n
 )
 
-res_peak_genes<-data.table(as.data.frame(Links(cbls_stim)))
+res_peak_genes<-data.table(as.data.frame(Links(cbls)))
 res_peak_genes #267
 fwrite(res_peak_genes,fp(out,"res_peak_genes_egr1_klf2_klf4_regulons_linkage.csv"))
 
 #same for all genes in regulons
 
-cbls_stim <- LinkPeaks(
-  object = cbls_stim,
+cbls <- LinkPeaks(
+  object = cbls,
   peak.assay = "peaks",
   expression.assay = "SCT",
   genes.use = unique(regulons$gene)
 )
 
-res_peak_genes<-data.table(as.data.frame(Links(cbls_stim)))
+res_peak_genes<-data.table(as.data.frame(Links(cbls)))
 res_peak_genes #4281
 res_peak_genes[pvalue<0.05]
 fwrite(res_peak_genes,fp(out,"res_peak_genes_all_genes_regulons_linkage.csv"))
+res_peak_genes<-fread(fp(out,"res_peak_genes_all_genes_regulons_linkage.csv"))
 
-
+length(unique(res_peak_genes$gene)) #1487
+length(unique(regulons$gene)) #2476
+1487/2476
 #n links in EGR1N
 egr1n<-fread("outputs/16-GRN_final/egr1_KLF2_KLF4_network_tf_target_interactions.csv")
 egr1n_genes<-unique(c(egr1n$target,egr1n$tf))
@@ -1156,89 +1204,301 @@ npg[order(-as.vector(npg))]
 #        1        1        1        1        1        1        1        1 
 
 
-#merge with DMCs
-res_peak_genes[,chr:=seqnames]
-res_peak_genes[,start.peak:=start(peak)]
-res_peak_genes[,end.peak:=end(peak),by="peak"]
 
-res_cpgs<-fread("outputs/14-DMCs_atac_integr/res_cpgs_hg38.cs.gz")
-cpgs_in_cres<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
-          res_peak_genes[,.(chr,start.peak,end.peak,peak)][order(chr,start.peak,end.peak)],
-          select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peak","start","end"))
+ #CCL : 78/123 of Egr1/KLF2/KLF4 regulons have CREs
 
-length(unique(cpgs_in_cres$cpg_id))#17146/750k cpgs (instead of 7k for cbl12)
-length(unique(cpgs_in_cres$peak)) #2.3k/4.2k peaks
+#edit 23/11/22 
+#DMCs DEGs enrichment in peak down prev atac but with peak-gene link of multiome
 
-fwrite(cpgs_in_cres,fp(out,"cpgs_in_CREs.csv.gz"))
-#% DMCs overlapping CREs
-res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
-
-cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
-nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #6% DMCs are in CREs 
-
-#vs % CpGs overlapping 
-nrow(cres_meth)/nrow(res_meth) #2.4% CpGs are in CREs
-
-(nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]))/(nrow(cres_meth)/nrow(res_meth)) #2.47 foldenrichment
+#linkPeaks for every closest genes of background used for enrichment (peaks test for DA pct.det>0.05)
+#run 27A
 
 
-OR(set1 = res_meth[P.Value<0.001&abs(logFC)>25]$cpg_id,
-   set2= cres_meth$cpg_id,size_universe = nrow(res_meth)) #p = 2.033127e-37
+stims<-readRDS("outputs/27-multiomics_cbl_stim/cbls_stim_final.rds")
 
 
-####
-tfs<-c("EGR1","KLF2","KLF4")
-cpgs_in_cres_egr1n<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
-          res_peak_genes[gene%in%regulons[tf%in%tfs]$gene][,.(chr,start.peak,end.peak,peak)][order(chr,start.peak,end.peak)],
-          select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peak","start","end"))
+pgl<-fread("outputs/27-multiomics_cbl_stim/res_peak_genes_all_linkage.csv.gz")
+pgl[,start.peak:=start(peak)]
+pgl[,end.peak:=end(peak)]
 
-length(unique(cpgs_in_cres_egr1n$cpg_id))#1312/750k cpgs
-length(unique(cpgs_in_cres_egr1n$peak)) #171/257 peaks
+#stats
+pgl#15k peak gene link
 
-fwrite(cpgs_in_cres_egr1n,fp(out,"cpgs_in_CREs_EGR1_KLF2_KLF4_regulons.csv.gz"))
-
-#% DMCs overlapping CREs EGR1_KLF2_KLF4_regulons
-res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
-
-cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
-cres_meth[P.Value<0.001&abs(logFC)>25]
-nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #2.5% DMCs are in CREs 
-
-cres_meth[P.Value<0.001&abs(logFC)>25] #17 DMCs  in CRE 
-cres_meth_genes<-merge(cres_meth,res_peak_genes,by=c("peak","chr"))
-cres_meth_genes[P.Value<0.001&abs(logFC)>25]
-cres_meth_genes[P.Value<0.001&abs(logFC)>25][,.(chr,peak,pos,P.Value,logFC,gene)]
-
-#       chr                      peak       pos      P.Value    logFC    gene
-#  1:  chr1  chr1-181088263-181090448 181089758 1.163360e-05 56.43245    IER5
-#  2:  chr1    chr1-23553947-23555213  23554528 6.791300e-04 50.68169     ID3
-#  3:  chr1    chr1-44813348-44814070  44813782 7.829432e-05 54.57994   PTCH2
-#  4: chr10 chr10-102713406-102715152 102714631 8.426493e-05 51.52761   TRIM8
-#  5: chr11     chr11-2883974-2886612   2885092 1.616649e-04 59.46079  CDKN1C
-#  6: chr11     chr11-2883974-2886612   2885684 8.917287e-04 41.66439  CDKN1C
-#  7: chr11     chr11-2883974-2886612   2885966 7.398161e-05 62.06919  CDKN1C
-#  8: chr11   chr11-62545272-62547035  62545815 9.363807e-04 48.48676   AHNAK
-#  9: chr11   chr11-62545272-62547035  62545848 7.401320e-04 42.24850   AHNAK
-# 10: chr12   chr12-52050386-52051841  52050979 6.832596e-04 51.60495   GRASP
-# 11: chr13   chr13-44575715-44578236  44577044 6.739804e-04 38.94290 TSC22D1
-# 12: chr14   chr14-68795217-68796424  68795624 6.465818e-04 61.39083 ZFP36L1
-# 13: chr15   chr15-31325512-31327254  31326011 5.526391e-04 45.65863   KLF13
-# 14: chr15   chr15-84980271-84982396  84980535 4.367939e-04 51.58003  AKAP13
-# 15: chr17   chr17-78262975-78263905  78263390 1.892195e-04 61.05853   SOCS3
-# 16: chr17   chr17-78358820-78361021  78359375 3.759657e-04 65.01007   SOCS3
-# 17: chr17   chr17-78358820-78361021  78359484 3.505579e-04 60.92096   SOCS3
+length(unique(pgl$peak))#13k peaks
+length(unique(pgl$gene))#7k genes
 
 
-#vs CpGs overlapping 
-nrow(cres_meth) #1398 CpGs are in CREs EGRN
+#overlap this CREs  with peak scATAC-seq
+
+peaks<-fread("outputs/14-DMCs_atac_integr/cbps_atacs_peaks_by_lineage.csv.gz")
+peaks_in_cres<-bed_inter(peaks[,.(seqnames,start,end,peaks)][order(seqnames,start)],
+          unique(pgl[,.(seqnames,start.peak,end.peak,peak)][order(seqnames,start.peak,end.peak)]),
+          select = c(4,1,8,6,7),col.names = c("peak_scatac","chr","peak_scmulti","start.peak","end.peak"))
+
+peaks_in_cres #13k overlap
+#N of peak overlap 
+nrow(peaks_in_cres)/length(unique(pgl$peak))
+unique(peaks_in_cres)
+pgla<-merge(pgl[,peak_scmulti:=peak],peaks_in_cres)
 
 
-#ggplot(cres_meth)+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #nop
+#N peak-genes validated by multiome
+#across the 13k CREs
+peaks_hsc_anno<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+phaf<-peaks_hsc_anno[query_region%in%pgla$peak_scatac]
+phaf#11k
+phaf[,well_linked_genes:=gene_name%in%pgla[peak_scatac==query_region]$gene,by="query_region"]
+table(unique(phaf,by="query_region")$well_linked_genes)
+# FALSE  TRUE 
+#  8241  3198 
+3198 / 8241 #38%
+pgla
+
+#DMCs/DEGs enrichemnt
+
+#merge with res_degs
+peaks_hsc_genes<-fread("outputs/14-DMCs_atac_integr/peaks_hsc_genes_anno.csv.gz")
+
+res_degs<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_pseudobulkDESeq2_by_lineage.csv.gz")
+pgla_e<-merge(pgla,res_degs[lineage=="HSC"],by = "gene")
+pgla_e#11143 peaks asso to express genes
+length(unique(pgla_e$gene)) #4786 genes
+
+#merge with res_cpgs
+peaks_cpgs<-fread("outputs/14-DMCs_atac_integr/cpgs_in_lin_OCRs.csv.gz")
+peaks_meth<-merge(peaks_cpgs,fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz"))
+peaks_meth[,peak_scatac:=peaks]
+peaks_methf<-peaks_meth[peak_scatac%in%pgla$peak_scatac]
+length(unique(peaks_methf$peaks)) #7597 peaks
+length(unique(peaks_methf$cpg_id)) #52339 CpGs
 
 
- #CCL : 78/123 of Egr1/KLF2/KLF4 regulons have CREs,  1398 CpGs and 17 DMCs fall in it.
+#term list : peaks DMCs/DEGs
+meth_degs_cres_list<-list(CpGs_inCREs=unique(peaks_methf$peaks),
+                         DMCs_inCREs=unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                         DEGs_withCREs=unique(pgla_e[padj<0.05&abs(log2FoldChange)>0.5]$peak_scatac),
+                         DMCs_inCREs_with_DEGs=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(pgla_e[padj<0.05&abs(log2FoldChange)>0.5]$peak_scatac)))
+lapply(meth_degs_cres_list, length)
+# $CpGs_inCREs
+# [1] 7597
+# 
+# $DMCs_inCREs
+# [1] 651
+# 
+# $DEGs_withCREs
+# [1] 327
+# 
+# $DMCs_inCREs_with_DEGs
+# [1] 18
+# 
 
-#TF motif analysis on the peaks
+lapply(meth_degs_cres_list, head)
+
+#query list : peaks up dn
+peaks_hsc_lga_xy<-fread("outputs/15-chromatin_change_LGA_vs_Ctrl/differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz")
+peaks_hsc_lga_xyf<-peaks_hsc_lga_xy[peak%in%pgla$peak_scatac]
+peaks_hsc_lga_xyf#106 /290
+
+da_cres_list<-list(da_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&abs(avg_log2FC)>0.25]$peak),
+                down_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak),
+                up_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC>0.25]$peak))
+lapply(da_cres_list, length)
+# $da_CREs
+# [1] 102
+# 
+# $down_CREs
+# [1] 85
+# 
+# $up_CREs
+# [1] 17
+
+lapply(da_cres_list, head)
+
+#background : peaks in CREs
+
+background<-unique(pgla_e$peak_scatac)
+length(background) #10k peaks
+head(background)
+
+res_or_da_cres_dmcs_degs<-OR3(da_cres_list,
+                    meth_degs_cres_list,
+                    background = background,
+                    overlap_column = F) 
+res_or_da_cres_dmcs_degs
+
+fwrite(res_or_da_cres_dmcs_degs,fp(out,"res_da_cres_enrichment_for_dmcs_degs.csv"))
+
+#2
+meth_degs_cres_list<-list(DMCs=unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                         DEGs=unique(pgla_e[padj<0.05&abs(log2FoldChange)>0.5]$peak_scatac),
+                         upreg=unique(pgla_e[padj<0.05&log2FoldChange>0.5]$peak_scatac),
+                         downreg=unique(pgla_e[padj<0.05&log2FoldChange<(-0.5)]$peak_scatac),
+                         DMCs_DEGs=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(pgla_e[padj<0.05&abs(log2FoldChange)>0.5]$peak_scatac)),
+                         DMCs_upreg=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(pgla_e[padj<0.05&log2FoldChange>0.5]$peak_scatac)),
+                         DMCs_downreg=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(pgla_e[padj<0.05&log2FoldChange<(-0.5)]$peak_scatac)))
+lapply(meth_degs_cres_list, length)
+# $CpGs
+# [1] 7597
+# 
+# $DMCs
+# [1] 651
+# 
+# $DEGs
+# [1] 327
+# 
+# $upreg
+# [1] 96
+# 
+# $downreg
+# [1] 231
+# 
+# $DMCs_DEGs
+# [1] 18
+# 
+# $DMCs_upreg
+# [1] 4
+# 
+# $DMCs_downreg
+# [1] 14
+
+
+#query list : peaks up dn
+peaks_hsc_lga_xy<-fread("outputs/15-chromatin_change_LGA_vs_Ctrl/differential_peaks_accessibility_lga_vs_ctrl_hsc_without_xy.csv.gz")
+peaks_hsc_lga_xyf<-peaks_hsc_lga_xy[peak%in%pgla$peak_scatac]
+peaks_hsc_lga_xyf#106 /290
+
+da_cres_list<-list(da_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&abs(avg_log2FC)>0.25]$peak),
+                down_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak),
+                up_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC>0.25]$peak))
+lapply(da_cres_list, length)
+# $da_CREs
+# [1] 102
+# 
+# $down_CREs
+# [1] 85
+# 
+# $up_CREs
+# [1] 17
+
+lapply(da_cres_list, head)
+
+#background : peaks in CREs
+
+background<-unique(pgla_e$peak_scatac)
+length(background) #10k peaks
+head(background)
+
+res_or_da_cres_dmcs_degs<-OR3(da_cres_list,
+                    meth_degs_cres_list,
+                    background = background,
+                    overlap_column = F) 
+res_or_da_cres_dmcs_degs
+
+fwrite(res_or_da_cres_dmcs_degs,fp(out,"res_da_cres_enrichment_for_dmcs_degs2.csv"))
+
+
+#        query.                  term term.size n.query n.overlap pct.query.overlap  precision pct.term.overlap background_size pct.term.background         pval         padj
+#  1:   da_CREs           CpGs_inCREs      6034      97        90        0.92783505 0.92783505      0.014915479            9699         0.622125992 3.740578e-12 1.496231e-11
+#  2:   da_CREs           DMCs_inCREs       540      97        16        0.16494845 0.16494845      0.029629630            9699         0.055675843 8.094559e-05 1.618912e-04
+#  3:   da_CREs         DEGs_withCREs       327      97         7        0.07216495 0.07216495      0.021406728            9699         0.033714816 4.515888e-02 4.515888e-02
+#  4:   da_CREs DMCs_inCREs_with_DEGs        18      97         2        0.02061856 0.02061856      0.111111111            9699         0.001855861 1.364740e-02 1.819654e-02
+#  5: down_CREs           CpGs_inCREs      6034      82        82        1.00000000 1.00000000      0.013589659            9699         0.622125992 1.016335e-17 4.065340e-17
+#  6: down_CREs           DMCs_inCREs       540      82        15        0.18292683 0.18292683      0.027777778            9699         0.055675843 3.914645e-05 7.829290e-05
+#  7: down_CREs         DEGs_withCREs       327      82         7        0.08536585 0.08536585      0.021406728            9699         0.033714816 2.036627e-02 2.036627e-02
+#  8: down_CREs DMCs_inCREs_with_DEGs        18      82         2        0.02439024 0.02439024      0.111111111            9699         0.001855861 9.895466e-03 1.319395e-02
+#  9:   up_CREs           CpGs_inCREs      6034      15         8        0.53333333 0.53333333      0.001325820            9699         0.622125992 8.358412e-01 1.000000e+00
+# 10:   up_CREs           DMCs_inCREs       540      15         1        0.06666667 0.06666667      0.001851852            9699         0.055675843 5.768065e-01 1.000000e+00
+# 11:   up_CREs         DEGs_withCREs       327      15         0        0.00000000 0.00000000      0.000000000            9699         0.033714816 1.000000e+00 1.000000e+00
+# 12:   up_CREs DMCs_inCREs_with_DEGs        18      15         0        0.00000000 0.00000000      0.000000000            9699         0.001855861 1.000000e+00 1.000000e+00
+#     fold.enrichment     query
+#  1:       1.4913941   da_CREs
+#  2:       2.9626575   da_CREs
+#  3:       2.1404521   da_CREs
+#  4:      11.1099656   da_CREs
+#  5:       1.6073914 down_CREs
+#  6:       3.2855691 down_CREs
+#  7:       2.5319982 down_CREs
+#  8:      13.1422764 down_CREs
+#  9:       0.8572754   up_CREs
+# 10:       1.1974074   up_CREs
+# 11:       0.0000000   up_CREs
+# 12:       0.0000000   up_CREs
+
+#end edit 23/11/22
+
+#edit 27/11 
+#DMCs/ DA CREs enrichment in DEGs
+#term list : peaks DMCs/ up and dn
+meth_da_cres_list<-list(CpGs=unique(peaks_methf$peaks),
+                         DMCs=unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                         da_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&abs(avg_log2FC)>0.25]$peak),
+                        down_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak),
+                         up_CREs=unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC>0.25]$peak),
+                         DMCs_down_CREs=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC<(-0.25)]$peak)),
+                        DMCs_up_CREs=intersect(unique(peaks_methf[P.Value<0.001&abs(logFC)>25]$peaks),
+                                             unique(peaks_hsc_lga_xyf[p_val_adj<0.05&avg_log2FC>0.25]$peak)))
+lapply(meth_da_cres_list, length)
+# $CpGs
+# [1] 7597
+# 
+# $DMCs
+# [1] 651
+# 
+# $da_CREs
+# [1] 102
+# 
+# $down_CREs
+# [1] 85
+# 
+# $up_CREs
+# [1] 17
+# 
+# $DMCs_down_CREs
+# [1] 15
+# 
+# $DMCs_up_CREs
+# [1] 1
+
+#query list : CREs of DEGs
+degs_cres_list<-list(DEGs=unique(pgla_e[padj<0.05&abs(log2FoldChange)>0.5]$peak_scatac),
+                      upreg=unique(pgla_e[padj<0.05&log2FoldChange>0.5]$peak_scatac),
+                      downreg=unique(pgla_e[padj<0.05&log2FoldChange<(-0.5)]$peak_scatac))
+lapply(degs_cres_list, length)
+# $DEGs
+# [1] 327
+# 
+# $upreg
+# [1] 96
+# 
+# $downreg
+# [1] 231
+
+
+#background : peaks in CREs
+
+background<-unique(pgla_e$peak_scatac)
+length(background) #10k peaks
+head(background)
+
+res_or_degs_cres_dmcs_da<-OR3(degs_cres_list,
+                    meth_da_cres_list,
+                    background = background,
+                    overlap_column = F) 
+res_or_degs_cres_dmcs_da
+
+fwrite(res_or_degs_cres_dmcs_da,fp(out,"res_degs_cres_enrichment_for_dmcs_da_cres.csv"))
+
+
+
+
+#end edit 27/11/22
+
+#TF motif analysis on the peaks####
 #Adding motif information to the Seurat object
 library(JASPAR2020)
 library(TFBSTools)
@@ -1251,15 +1511,15 @@ pfm <- getMatrixSet(
 )
 
 # add motif information
-cbls_stim <- AddMotifs(
-  object = cbls_stim,
+cbls <- AddMotifs(
+  object = cbls,
   genome = BSgenome.Hsapiens.UCSC.hg38,
   pfm = pfm
 )
 
-motifs<-GetMotifIDs(object = cbls_stim,motif.names = c("EGR1","KLF2","KLF4"))
+motifs<-GetMotifIDs(object = cbls,motif.names = c("EGR1","KLF2","KLF4"))
 
-motifs_peaks<-GetMotif(cbls_stim,motifs = motifs,peaks=unique(res_peak_genes$peak))
+motifs_peaks<-GetMotif(cbls,motifs = motifs,peaks=unique(res_peak_genes$peak))
 motifs_peaks
 
 res_motifpeak_genes<-merge(res_peak_genes,motifs_peaks,by="peak",all.x=T)
@@ -1276,12 +1536,15 @@ intersect(res_motifpeak_genes[motif.name=="EGR1"]$gene,
           regulons[tf=="EGR1"]$gene)
 
 #12/26, 46%
+res_motifpeak_genes<-fread(fp(out,"res_peaks_genes_links_EGR1_KLF2_KLF4_motifs_anno.csv"))
+
 res_motifpeak_genesf<-res_motifpeak_genes[!is.na(motif)]
+
 #enrichement for him and others
-DefaultAssay(cbls_stim)<-"SCT"
+DefaultAssay(cbls)<-"SCT"
 res_enr<-OR3(querys = lapply(split(res_motifpeak_genesf$gene,res_motifpeak_genesf$motif.name),unique),
          terms_list = split(regulons$gene,regulons$tf),
-         background = intersect(rownames(cbls_stim),unique(regulons$gene)))
+         background = intersect(rownames(cbls),unique(regulons$gene)))
 
 res_enr[padj<0.05][order(padj)]
 
@@ -1322,10 +1585,10 @@ res_enr[,motif:=query.]
 res_enr[,pct.regulon_with_CREsmotifs:=pct.term.overlap]
 res_enr[,.(regulon,motif,pct.regulon_with_CREsmotifs,pval)][regulon%in%c("EGR1","KLF2","KLF4")][order(regulon)]
 
-   regulon motif pct.regulon_with_CREsmotifs        pval
-1:    EGR1  EGR1                   0.4615385 0.044898906
-5:    KLF2  KLF2                   0.4489796 0.007815648
-9:    KLF4  KLF4                   0.3809524 0.537404443
+#    regulon motif pct.regulon_with_CREsmotifs        pval
+# 1:    EGR1  EGR1                   0.4615385 0.044898906
+# 5:    KLF2  KLF2                   0.4489796 0.007815648
+# 9:    KLF4  KLF4                   0.3809524 0.537404443
 
 #check pctage egr1 dans cres
 unique(res_motifpeak_genesf[motif.name=="EGR1"],by="peak")
@@ -1339,12 +1602,103 @@ length(unique(res_motifpeak_genesf$peak))#1552/4015  38% of CREs have KLF4
 
 unique(res_motifpeak_genesf[motif.name%in%tfs],by="peak")#1826/4015 #45% of CREs with motifs
 
+#merge with DMCs####
+res_peak_genes[,chr:=seqnames]
+res_peak_genes[,start.peak:=start(peak)]
+res_peak_genes[,end.peak:=end(peak),by="peak"]
 
-#DMCs overlapping CREs EGR1/KLF2/KLF4 regulatory netw
+res_cpgs<-fread("outputs/14-DMCs_atac_integr/res_cpgs_hg38.cs.gz")
+cpgs_in_cres<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
+          res_peak_genes[,.(chr,start.peak,end.peak,peak)][order(chr,start.peak,end.peak)],
+          select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peak","start","end"))
+
+length(unique(cpgs_in_cres$cpg_id))#17146/750k cpgs (instead of 7k for cbl12)
+length(unique(cpgs_in_cres$peak)) #2.3k/4.2k peaks
+
+fwrite(cpgs_in_cres,fp(out,"cpgs_in_CREs.csv.gz"))
+#% DMCs overlapping CREs
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+
+cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
+nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #6% DMCs are in CREs 
+
+#vs % CpGs overlapping 
+nrow(cres_meth)/nrow(res_meth) #2.4% CpGs are in CREs
+
+(nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]))/(nrow(cres_meth)/nrow(res_meth)) #2.47 foldenrichment
+
+
+OR(set1 = res_meth[P.Value<0.001&abs(logFC)>25]$cpg_id,
+   set2= cres_meth$cpg_id,size_universe = nrow(res_meth)) #p = 2.033127e-37
+
+
+#### CREs of OLD regulons EGRN integration with DMCs
+tfs<-c("EGR1","KLF2","KLF4")
+cpgs_in_cres_egr1n<-bed_inter(res_cpgs[,start:=pos][,end:=pos+1][,.(chr,start,end,cpg_id)][order(chr,start)],
+          res_peak_genes[gene%in%regulons[tf%in%tfs]$gene][,.(chr,start.peak,end.peak,peak)][order(chr,start.peak,end.peak)],
+          select = c(4,1,2,8,6,7),col.names = c("cpg_id","chr","pos","peak","start","end"))
+
+length(unique(cpgs_in_cres_egr1n$cpg_id))#1312/750k cpgs
+length(unique(cpgs_in_cres_egr1n$peak)) #171/257 peaks
+
+fwrite(cpgs_in_cres_egr1n,fp(out,"cpgs_in_CREs_EGR1_KLF2_KLF4_regulons.csv.gz"))
+
+#% DMCs overlapping CREs EGR1_KLF2_KLF4_regulons
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+
+cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
+cres_meth[P.Value<0.001&abs(logFC)>25] #297
+nrow(cres_meth[P.Value<0.001&abs(logFC)>25])/nrow(res_meth[P.Value<0.001&abs(logFC)>25]) #2.5% DMCs are in CREs 
+
+cres_meth[P.Value<0.001&abs(logFC)>25] #17 DMCs  in CRE 
+cres_meth_genes<-merge(cres_meth,res_peak_genes,by=c("peak","chr"))
+cres_meth_genes[P.Value<0.001&abs(logFC)>25]
+cres_meth_genes[P.Value<0.001&abs(logFC)>25][,.(chr,peak,pos,P.Value,logFC,gene)]
+
+#       chr                      peak       pos      P.Value    logFC    gene
+#  1:  chr1  chr1-181088263-181090448 181089758 1.163360e-05 56.43245    IER5
+#  2:  chr1    chr1-23553947-23555213  23554528 6.791300e-04 50.68169     ID3
+#  3:  chr1    chr1-44813348-44814070  44813782 7.829432e-05 54.57994   PTCH2
+#  4: chr10 chr10-102713406-102715152 102714631 8.426493e-05 51.52761   TRIM8
+#  5: chr11     chr11-2883974-2886612   2885092 1.616649e-04 59.46079  CDKN1C
+#  6: chr11     chr11-2883974-2886612   2885684 8.917287e-04 41.66439  CDKN1C
+#  7: chr11     chr11-2883974-2886612   2885966 7.398161e-05 62.06919  CDKN1C
+#  8: chr11   chr11-62545272-62547035  62545815 9.363807e-04 48.48676   AHNAK
+#  9: chr11   chr11-62545272-62547035  62545848 7.401320e-04 42.24850   AHNAK
+# 10: chr12   chr12-52050386-52051841  52050979 6.832596e-04 51.60495   GRASP
+# 11: chr13   chr13-44575715-44578236  44577044 6.739804e-04 38.94290 TSC22D1
+# 12: chr14   chr14-68795217-68796424  68795624 6.465818e-04 61.39083 ZFP36L1
+# 13: chr15   chr15-31325512-31327254  31326011 5.526391e-04 45.65863   KLF13
+# 14: chr15   chr15-84980271-84982396  84980535 4.367939e-04 51.58003  AKAP13
+# 15: chr17   chr17-78262975-78263905  78263390 1.892195e-04 61.05853   SOCS3
+# 16: chr17   chr17-78358820-78361021  78359375 3.759657e-04 65.01007   SOCS3
+# 17: chr17   chr17-78358820-78361021  78359484 3.505579e-04 60.92096   SOCS3
+
+
+#vs CpGs overlapping 
+nrow(cres_meth) #1398 CpGs are in CREs EGRN
+
+
+#ggplot(cres_meth)+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #nop
+
+
+
+#DMCs overlapping new CREs EGR1/KLF2/KLF4 regulatory netw####
+cpgs_in_cres<-fread(fp(out,"cpgs_in_CREs.csv.gz"))
+
 genes_egrncres<-unique(res_motifpeak_genesf[motif.name%in%tfs][,.(gene,motif.name,peak)])
 cres_cpgs_egrn<-merge(cpgs_in_cres,genes_egrncres,by="peak",,allow.cartesian=TRUE)
 cres_meth_egrn<-merge(cres_cpgs_egrn,res_meth,by="cpg_id")
+
+unique(cpgs_in_cres,by="cpg_id") #17k
+
+unique(cres_cpgs_egrn,by="cpg_id") #15k => 15/17, 88% have EGR1 or KLF2/KLF4 motifs
+
+cres_meth[P.Value<0.001&abs(logFC)>25]
+unique(cres_meth[P.Value<0.001&abs(logFC)>25],by="peak")
 unique(cres_meth_egrn[P.Value<0.001&abs(logFC)>25],by="cpg_id") #243/4815 5% DMCs in CREs EGRN
+unique(cres_meth_egrn[P.Value<0.001&abs(logFC)>25],by="peak") #198/216 91% of DMCs asso CREs in CREs EGRN
+#243/296 #82%
 res_meth[P.Value<0.001&abs(logFC)>25]#4815 DMCs
 
 #vs CpGs overlapping 
@@ -1360,13 +1714,22 @@ univ<-unique(cres_meth$cpg_id)
 OR(set1 = intersect(res_meth[P.Value<0.001&abs(logFC)>25]$cpg_id,univ),
    set2= cres_meth_egrn$cpg_id,size_universe = length(univ)) #p = 0.03
 
+#enrichment  for egrn CREs in DMCs asso CREs ?
+univ<-unique(cres_meth$peak)
+OR(set1 = unique(cres_meth[P.Value<0.001&abs(logFC)>25]$peak),
+   set2= unique(cres_meth_egrn$peak),size_universe = length(univ)) #p = 5.710426e-20
+
+intersect(cres_meth_egrn$peak,unique(cres_meth[P.Value<0.001&abs(logFC)>25]$peak))
+#1532/2311(66%) peak asso with cpgs have EGR1/klf2/klf4. 198/216(91%) peaks with DMCs have EGR1/klf2/klf4
 #increase Meth in CREs EGRN vs CREs ?
 cres_meth[,in_EGRN:=cpg_id%in%cres_meth_egrn$cpg_id]
+unique(cres_meth[(in_EGRN)],by="cpg_id")
+unique(cres_meth,by="cpg_id") #15/17 #88% of CREsCpGs have EGR1/klf2/klf4
 
 cres_meth[,dmc_score:=-log10(P.Value)*logFC]
 plot(density(unique(cres_meth,by="cpg_id")$dmc_score))
 ggplot(unique(cres_meth,by="cpg_id"))+geom_boxplot(aes(x=in_EGRN,y=-log10(P.Value)*logFC)) #un peu
-ggplot(unique(cres_meth,by="cpg_id"))+geom_bar(aes(x=in_EGRN,fill=P.Value<0.001&abs(logFC)>25),position="fill") #un peu
+#ggplot(unique(cres_meth,by="cpg_id"))+geom_bar(aes(x=in_EGRN,fill=P.Value<0.001&abs(logFC)>25),position="fill") #un peu
 
 cres_meth[,FoldChange:=mean(dmc_score[in_EGRN==T])/mean(dmc_score[in_EGRN==F])] #1.39
 
@@ -1376,12 +1739,27 @@ cres_meth[,pval:=wilcox.test(dmc_score[in_EGRN==T],
                              dmc_score[in_EGRN==F])$p.value] #p = 3.407891e-30
 
 
+#CREs egrn of the genes regulons
+cpgs_in_cres_egr1n<-fread(fp(out,"cpgs_in_CREs_EGR1_KLF2_KLF4_regulons.csv.gz"))
+unique(cpgs_in_cres,by="cpg_id") #17k
 
+unique(cpgs_in_cres_egr1n,by="cpg_id") #1312 
+meth_in_cres_egr1n<-merge(cpgs_in_cres_egr1n,res_meth,by="cpg_id")
+
+cres_meth[P.Value<0.001&abs(logFC)>25]
+unique(cres_meth[P.Value<0.001&abs(logFC)>25],by="peak")
+unique(meth_in_cres_egr1n[P.Value<0.001&abs(logFC)>25],by="cpg_id") #17/4815  DMCs in CREs EGRN regulons
+unique(meth_in_cres_egr1n[P.Value<0.001&abs(logFC)>25],by="peak") #13/216 6% of DMCs asso CREs in CREs EGRN regulons
+#243/296 #82%
+res_meth[P.Value<0.001&abs(logFC)>25]#4815 DMCs
+#enrichment  for egrn CREs in DMCs asso CREs ?
+univ<-unique(cres_meth$peak)
+OR(set1 = unique(cres_meth[P.Value<0.001&abs(logFC)>25]$peak),
+   set2= unique(meth_in_cres_egr1n$peak),size_universe = length(univ)) #p =0.89
 
 #EFFECT OF LGA####
-
-##no stim
-unstim<-subset(cbls_stim,condition=="no_stim")
+##no stim####
+unstim<-subset(cbls,condition=="no_stim")
 head(colnames(unstim))
 #demultiplex based on HTO
 hto_mat<-Read10X("~/RUN/Run_733_single-cell/output/count/multi-a/outs/raw_feature_bc_matrix/")$`Antibody Capture`
@@ -1424,7 +1802,10 @@ table(unstim$group)
 
     # CTRL  Doublet      LGA Negative 
     #  814       33      756      383 
-  
+#save 
+saveRDS(unstim, fp(out,"cbls_unstim_hto_anno.rds"))
+fwrite(data.table(unstim@meta.data,keep.rownames="bc"), fp(out,"metadata_cbls_unstim_hto_anno.csv.gz"))
+
 #DEGs
 #all lin
 res<-data.table(FindMarkers(unstim,group.by="group",ident.1="LGA",ident.2 = "CTRL"),keep.rownames = "gene")
@@ -1467,9 +1848,11 @@ da_peaks_genes<-merge(da_peaks,res_peak_genes,all.x=T)
 da_peaks_genes#only 10/339 link to gene
 
 fwrite(da_peaks_genes[order(p_val)],fp(out,"res_da_peaks_lga_vs_ctrl_hsc_no_stim.csv"))
+dapg<-fread(fp(out,"res_da_peaks_lga_vs_ctrl_hsc_no_stim.csv"))
+dapg[!is.na(start)]
 
-##stim2h
-stim2<-subset(cbls_stim,condition=="stim_2h")
+##stim2h####
+stim2<-subset(cbls,condition=="stim_2h")
 head(colnames(stim2))
 #demultiplex based on HTO
 hto_mat<-Read10X("~/RUN/Run_733_single-cell/output/count/multi-b/outs/raw_feature_bc_matrix/")$`Antibody Capture`
@@ -1501,7 +1884,7 @@ hto_dt[,FC_pos:=expression/med_pos_lga]
 ggplot(hto_dt[HTO=="multi-b-LGA-stim-2h"])+
   geom_density(aes(x=FC_pos))
 
-#LGA recovery = all with expr HTO CTRL <q75 LGA cells
+#CTRl recovery = all with expr HTO CTRL <q75 LGA cells
 ctrl_reco<-hto_dt[HTO=="multi-b-LGA-stim-2h"][expression<quantile(expression[hash.ID=="multi-b-CTRL-stim-2h"],0.75)]$cell
 length(ctrl_reco)#1014
 stim2[["group"]]<-sapply(colnames(stim2), function(c){
@@ -1512,6 +1895,9 @@ table(stim2$group)
 # 
 #       CTRL  Doublet      LGA Negative 
 #     1021       37      911      370 
+#save 
+saveRDS(stim2, fp(out,"cbls_stim2h_hto_anno.rds"))
+fwrite(data.table(stim2@meta.data,keep.rownames="bc"), fp(out,"metadata_cbls_stim2h_hto_anno.csv.gz"))
   
 #DEGs
 #all lin
@@ -1548,7 +1934,7 @@ res_hsc[p_val<0.001] #MT genes upreg
 # 20:     ZEB1 1.333595e-04 -0.4285373 0.869 0.957 1.000000e+00
 # 21:  MT-ATP8 1.686675e-04  0.4867637 0.954 0.894 1.000000e+00
 # 22: SEPTIN11 2.308526e-04 -0.4677790 0.569 0.745 1.000000e+00
-# 23:     GRB2 2.361833e-04  0.4930504 0.677 0.479 1.000000e+00
+# 23:     GRB2 2.361833e-04  0.4930504 0.677 0.479 1.000000e+00 
 # 24:     FOSB 2.615998e-04 -0.6830469 0.177 0.394 1.000000e+00
 # 25:    MYADM 2.804907e-04 -0.5477473 0.292 0.511 1.000000e+00
 # 26:    PELI1 3.031176e-04 -0.7288248 0.431 0.606 1.000000e+00
@@ -1570,6 +1956,19 @@ res_hsc[p_val<0.001] #MT genes upreg
 # 42:     PIM3 9.354585e-04 -0.4742340 0.438 0.606 1.000000e+00
 # 43:      VIM 9.665343e-04 -0.4401005 0.823 0.872 1.000000e+00
 fwrite(res_hsc,fp(out,"res_hsc_stim2h_lga_vs_ctrl.csv"))
+res_hsc<-fread(fp(out,"res_hsc_stim2h_lga_vs_ctrl.csv"))
+res_hsc[p_val<0.001&gene%in%genes_egrncres$gene]
+#        gene        p_val avg_log2FC pct.1 pct.2  p_val_adj
+#  1: ANKRD28 2.393401e-06 -0.7316404 0.892 0.979 0.05401427
+#  2:     SPN 1.791290e-05  0.5532827 0.585 0.319 0.40425830
+#  3:   NEAT1 1.939646e-05 -0.5203589 0.785 0.926 0.43773924
+#  4:     FOS 1.052548e-04 -0.9257023 0.177 0.394 1.00000000
+#  5:    ZEB1 1.333595e-04 -0.4285373 0.869 0.957 1.00000000
+#  6:    FOSB 2.615998e-04 -0.6830469 0.177 0.394 1.00000000
+#  7:   KDM6A 7.105526e-04 -0.4094803 0.938 0.947 1.00000000
+#  8:  NFKBIA 8.455195e-04 -0.6187209 0.769 0.851 1.00000000
+#  9:    PIM3 9.354585e-04 -0.4742340 0.438 0.606 1.00000000
+# 10:     VIM 9.665343e-04 -0.4401005 0.823 0.872 1.00000000
 
 #DAP hsc
 DefaultAssay(stim2)<-"peaks"
@@ -1740,6 +2139,313 @@ da_peaks_genes[!is.na(gene)]# 44/861 link to gene
 
 fwrite(da_peaks_genes[order(p_val)],fp(out,"res_da_peaks_lga_vs_ctrl_hsc_2h_stim.csv"))
 
+dapg<-fread(fp(out,"res_da_peaks_lga_vs_ctrl_hsc_2h_stim.csv"))
+dapg[p_val<0.001]
+dapg[!is.na(start)][order(p_val)]
+
+#integr with res_degs
+res_all<-merge(res_hsc,dapg,by="gene")
+
+res_all
+#      gene      p_val.x avg_log2FC.x pct.1.x pct.2.x p_val_adj.x
+# 1:   FOSB 0.0002615998   -0.6830469   0.177   0.394           1
+# 2:   KLF6 0.0166917825   -0.3977153   0.785   0.809           1
+# 3: NFKBIA 0.0008455195   -0.6187209   0.769   0.851           1
+# 4: OSBPL8 0.0186909956   -0.2988500   0.838   0.883           1
+# 5:  WDR49 0.2044125457   -0.3718099   0.246   0.298           1
+#                        peak     p_val.y avg_log2FC.y pct.1.y
+# 1:  chr19-45442780-45444572 0.008562738   -0.2658373   0.169
+# 2:    chr10-3757619-3758187 0.015956760   -0.3169960   0.015
+# 3:  chr14-35375533-35376076 0.016893090    0.2893651   0.085
+# 4:  chr12-76878095-76879787 0.003367903   -0.2908373   0.192
+# 5: chr3-167379782-167380518 0.030213007   -0.2558430   0.123
+#    pct.2.y p_val_adj.y seqnames     start       end  width strand
+# 1:   0.309           1    chr19  45443676  45467995  24320      *
+# 2:   0.074           1    chr10   3757903   3785281  27379      *
+# 3:   0.021           1    chr14  35375805  35404749  28945      *
+# 4:   0.383           1    chr12  76559809  76878941 319133      *
+# 5:   0.245           1     chr3 167380150 167653983 273834      *
+#         score   zscore       pvalue   chr start.peak  end.peak
+# 1: 0.05032910 3.507549 2.261279e-04 chr19   45442780  45444572
+# 2: 0.06420560 4.214535 1.251464e-05 chr10    3757619   3758187
+# 3: 0.09357242 4.049753 2.563581e-05 chr14   35375533  35376076
+# 4: 0.07277046 2.246333 1.234134e-02 chr12   76878095  76879787
+# 5: 0.06065837 2.274836 1.145789e-02  chr3  167379782 167380518
+#with meth ?
+cres_meth[,in_egrn_regulons:=peak%in%meth_in_cres_egr1n$peak]
+unique(cres_meth,by="cpg_id") #17k
+
+unique(cres_meth[(in_egrn_regulons)],by="cpg_id") #1293/17k
+res_all_meth<-merge(res_all,cres_meth,by="peak")
+res_all_meth[P.Value<0.01]
+
+#merge all cbls ####
+cbls<-readRDS("outputs/27-multiomics_cbl_stim/cbls_stim.rds")
+p1<-DimPlot(cbls,label=T,group.by = "ident.2")
+
+p2<-DimPlot(cbls,label=T,reduction = "multi_humap",group.by = "ident.2")
+
+p1+p2
+
+FeaturePlot(cbls,c("LTB","CD99","VPREB1","IGHM"),label=T)
+DimPlot(cbls,label=T,group.by = "condition")
+
+#add HTO infos
+mtdhto<-rbind(unstim@meta.data,stim2@meta.data)
+fwrite(data.table(mtdhto,keep.rownames="bc"),fp(out,"all_metadata_unstim_stim2h.csv.gz"))
+mtdhto<-fread(fp(out,"all_metadata_unstim_stim2h.csv.ga"))
+mtdhto<-data.frame(mtdhto,row.names = "bc")
+cbls$group<-mtdhto[colnames(cbls),"group"]
+cbls$atac_peak_region_fragments<-mtdhto[colnames(cbls),"atac_peak_region_fragments"]
+
+#add motifs and save
+library(JASPAR2020)
+library(TFBSTools)
+library(BSgenome.Hsapiens.UCSC.hg38)
+
+# Get a list of motif position frequency matrices from the JASPAR database
+pfm <- getMatrixSet(
+  x = JASPAR2020,
+  opts = list(species = "Homo sapiens", all_versions = FALSE)
+)
+
+# add motif information
+DefaultAssay(cbls)<-"peaks"
+cbls <- AddMotifs(
+  object = cbls,
+  genome = BSgenome.Hsapiens.UCSC.hg38,
+  pfm = pfm
+)
+#save
+saveRDS(cbls,fp(out,"cbls_stim_final.rds"))
+table(cbls$group,cbls$condition)
+  #         no_stim stim_2h
+  # CTRL         814    1021
+  # Doublet       33      37
+  # LGA          756     911
+  # Negative     383     370
+
+table(cbls$group[cbls$ident.2=="HSC"],cbls$condition[cbls$ident.2=="HSC"])
+  #          no_stim stim_2h
+  # CTRL         117      94
+  # Doublet        4       4
+  # LGA          194     130
+  # Negative      83      43
 
 
+
+#tf-target netw based on regulons scenic + tf-peak-gene multimod ####
+cbls<-readRDS("outputs/27-multiomics_cbl_stim/cbls_stim_final.rds")
+
+
+regulons_ext<-fread("outputs/10-SCENIC/regulons_extended.csv")[str_detect(tf,"e$")]
+regulons_ext[,tf:=str_remove(tf,"e$")]
+res_peak_genes<-fread("outputs/27-multiomics_cbl_stim/res_peak_genes_all_genes_regulons_linkage.csv")
+motifs_peaks<-GetMotif(object = cbls,peaks = unique(res_peak_genes$peak),assay = "peaks")
+res_motifpeak_genes<-merge(res_peak_genes,motifs_peaks,by="peak",allow.cartesian=TRUE)
+res_motifpeak_genes[,motif.name:=as.character(motif.name)]
+
+regpeak<-unique(res_motifpeak_genes[,.(motif.name,peak,gene)])
+regpeak[,tf:=motif.name]
+regn<-merge(regulons_ext,regpeak,by=c("tf","gene"))
+unique(regn,by=c("tf","gene")) #8694 tf-gene link
+
+#add alterations [p_val<0.05]
+  #degs
+res_hsc[p_val<0.05,deg:=T]
+res_hsc[p_val<0.05,expr_log2FC:=avg_log2FC]
+
+regn<-merge(regn,res_hsc[deg==T,.(gene,deg,expr_log2FC)],all.x=T,by="gene")
+  #dap
+dapg[p_val<0.05,da:=T]
+dapg[p_val<0.05,access_log2FC:=avg_log2FC]
+regn<-merge(regn,dapg[da==T,.(peak,da,access_log2FC)],all.x=T,by="peak")
+
+  #dmcs
+cpgs_in_cres<-fread("outputs/27-multiomics_cbl_stim/cpgs_in_CREs.csv.gz")
+
+res_meth<-fread("outputs/01-lga_vs_ctrl_limma_DMCs_analysis/res_limma.tsv.gz")
+
+cres_meth<-merge(cpgs_in_cres,res_meth,by="cpg_id")
+cres_meth[P.Value<0.05,dmc:=T]
+cres_methp<-unique(cres_meth[dmc==T][order(peak,P.Value)],by=c("peak"))
+cres_methp[,meth_logFC:=logFC]
+regn<-merge(regn,unique(cres_methp[,.(peak,dmc,meth_logFC)]),all.x=T,by="peak")
+
+
+  #if altered tf gene > all targets altered
+regn[tf%in%gene[deg|dmc|da],dtf:=T]
+unique(regn[dtf==T]$tf)
+#  [1] "FOXP1"   "GABPA"   "ETS1"    "ELF1"    "FOS"     "JUNB"   
+#  [7] "ZEB1"    "CTCF"    "IRF2"    "MEIS1"   "USF2"    "RREB1"  
+# [13] "MAX"     "STAT3"   "BHLHE40" "KLF2"    "REST"    "RUNX3"  
+# [19] "KLF13"   "NFKB2"   "EGR1"    "RELB"    "MEF2D"   "MAFG"   
+# [25] "GATA2"   "ETV6"    "KLF10"   "GATA3"   "HLF"     "ERG"    
+# [31] "ELK3"    "CEBPG"   "JUN"     "KLF6"    "MEF2C"   "NFIA"   
+# [37] "THRB"    "MYB"     "HOXA5"   "NFKB1"   "TGIF1"   "TCF3"   
+# [43] "MAFF"    "ETS2"    "MGA"     "MEF2A"   "ETV3"    "POU2F2" 
+unique(regn$tf) #48/101 TF altered
+#altered gene network
+
+regn_alt<-regn[deg|dmc|da|dtf] #8k/12k
+#n of alt by tf-gene
+regn_alt[,nalt:=sum(c(deg,da,dmc,dtf),na.rm = T),by=c("tf","gene")]
+
+regn_alt[,nalt_nodmc:=sum(c(deg,da,dtf),na.rm = T),by=c("tf","gene")]
+
+regn_alt[nalt>2&nalt_nodmc>2][order(-nalt)][1:50]
+#by tf
+regn_alt[,nalt.tf:=sum(nalt),by=c("tf")]
+regn_alt[,nalt.tf.norm:=nalt.tf/.N,by=c("tf")]
+unique(regn_alt[order(-nalt.tf.norm)],by="tf")
+#                          peak     gene      tf motif.name  deg nalt.tf nalt.tf.norm
+#   1:  chr1-112465750-112466581     RHOC    KLF2       KLF2   NA 644     6.075472
+#   2:      chr1-1058769-1059856     HES4    ZEB1       ZEB1   NA 1771     4.167059
+#   3:   chr15-43977093-43977410  TP53BP1     MGA        MGA   NA  16     4.000000
+#   4:  chr1-149886343-149888681  PLEKHO1    EGR1       EGR1   NA 1004     3.984127
+#   5:    chr1-27111784-27112625    WASF2   MEF2C      MEF2C   NA
+#   6:  chr1-181088263-181090448     IER5   KLF10      KLF10   NA
+#   7:  chr1-108533621-108534509  FAM102B   RREB1      RREB1   NA
+#   8: chr10-102393701-102395972    NFKB2   NFKB1      NFKB1   NA
+#   9:  chr1-198633460-198634114    PTPRC   GATA3      GATA3   NA
+plot(density(unique(regn_alt,by="tf")$nalt.tf.norm))
+#linked alteration if tf neighbor > 3 norm alt.
+regn_alt[,tf.alt:=nalt.tf.norm>3]
+tfalts<-unique(regn_alt[(tf.alt)]$tf)
+tfalts
+#  [1] "GABPA" "ELF1"  "ZEB1"  "CTCF"  "RREB1" "KLF2"  "REST"  "NFKB2" "EGR1"  "MEF2D"
+# [11] "GATA2" "ETV6"  "KLF10" "GATA3" "MEF2C" "NFKB1" "TCF3"  "MGA" 
+regn_alt[,neighb.tf.alt:=gene%in%tfalts]
+regn_alt[,linked.tfs.alt:=tf.alt&neighb.tf.alt]
+unique(regn_alt[(linked.tfs.alt)],by=c("tf","gene"))
+#                         peak  gene    tf motif.name  deg expr_log2FC da
+#  1:  chr1-156105983-156106797 MEF2D GABPA      GABPA   NA          NA NA
+#  2:  chr1-156398309-156398634 MEF2D MEF2D      MEF2D   NA          NA NA
+#  3:  chr1-156786348-156787067 MEF2D  REST       REST   NA          NA NA
+#  4:  chr1-156786348-156787067 MEF2D  ZEB1       ZEB1   NA          NA NA
+#  5:  chr1-156859645-156861094 MEF2D  CTCF       CTCF   NA          NA NA
+#  6: chr10-102393701-102395972 NFKB2  CTCF       CTCF   NA          NA NA
+#  7: chr10-102393701-102395972 NFKB2  EGR1       EGR1   NA          NA NA
+#  8: chr10-102393701-102395972 NFKB2  KLF2       KLF2   NA          NA NA
+#  9: chr10-102393701-102395972 NFKB2 NFKB1      NFKB1   NA          NA NA
+# 10: chr10-102393701-102395972 NFKB2 NFKB2      NFKB2   NA          NA NA
+# 11: chr10-102616188-102616443 NFKB2  REST       REST   NA          NA NA
+# 12:   chr10-31586554-31587437  ZEB1  EGR1       EGR1 TRUE  -0.4285373 NA
+# 13:     chr10-8048240-8048996 GATA3  EGR1       EGR1   NA          NA NA
+# 14:     chr10-8048240-8048996 GATA3  ELF1       ELF1   NA          NA NA
+# 15:     chr10-8048240-8048996 GATA3 GABPA      GABPA   NA          NA NA
+# 16:     chr10-8048240-8048996 GATA3 NFKB2      NFKB2   NA          NA NA
+# 17:   chr15-41620970-41622187   MGA RREB1      RREB1   NA          NA NA
+# 18:   chr16-67226369-67227493  CTCF GABPA      GABPA   NA          NA NA
+# 19:   chr16-67226369-67227493  CTCF  REST       REST   NA          NA NA
+# 20:   chr16-67561658-67563665  CTCF  CTCF       CTCF   NA          NA NA
+# 21:     chr19-1248117-1249915  TCF3  CTCF       CTCF   NA          NA NA
+# 22:     chr19-1248117-1249915  TCF3 GABPA      GABPA   NA          NA NA
+# 23:     chr19-1248117-1249915  TCF3  TCF3       TCF3   NA          NA NA
+# 24:   chr19-16330414-16330745  KLF2 GABPA      GABPA   NA          NA NA
+# 25:     chr19-1811367-1813285  TCF3  REST       REST   NA          NA NA
+# 26:   chr21-25606969-25608605 GABPA  CTCF       CTCF   NA          NA NA
+# 27:  chr3-128456923-128457438 GATA2 GATA2      GATA2   NA          NA NA
+# 28:  chr3-128467072-128467484 GATA2  ELF1       ELF1   NA          NA NA
+# 29:  chr3-128492759-128493410 GATA2  EGR1       EGR1   NA          NA NA
+# 30:  chr4-102500393-102502452 NFKB1  EGR1       EGR1   NA          NA NA
+# 31:  chr4-102500393-102502452 NFKB1  ELF1       ELF1   NA          NA NA
+# 32:  chr4-102500393-102502452 NFKB1 GABPA      GABPA   NA          NA NA
+# 33:  chr4-102500393-102502452 NFKB1  ZEB1       ZEB1   NA          NA NA
+# 34:  chr4-102627735-102628166 NFKB1  CTCF       CTCF   NA          NA NA
+# 35:  chr4-102826505-102828592 NFKB1  REST       REST   NA          NA NA
+# 36:    chr4-56653359-56653854  REST GABPA      GABPA   NA          NA NA
+# 37:    chr4-56976457-56978161  REST  REST       REST   NA          NA NA
+# 38:    chr4-56976457-56978161  REST  ZEB1       ZEB1   NA          NA NA
+# 39:  chr5-138148859-138149080  EGR1  ELF1       ELF1   NA          NA NA
+# 40:  chr5-138148859-138149080  EGR1  KLF2       KLF2   NA          NA NA
+# 41:    chr5-88826833-88827723 MEF2C  ELF1       ELF1   NA          NA NA
+# 42:    chr5-88826833-88827723 MEF2C GABPA      GABPA   NA          NA NA
+# 43:    chr5-88883031-88884804 MEF2C MEF2C      MEF2C   NA          NA NA
+# 44:      chr6-6723717-6725088 RREB1  CTCF       CTCF   NA          NA NA
+# 45:      chr6-6723717-6725088 RREB1 GABPA      GABPA   NA          NA NA
+# 46:      chr6-6942588-6943650 RREB1 RREB1      RREB1   NA          NA NA
+# 47:  chr8-102655285-102656514 KLF10  EGR1       EGR1   NA          NA NA
+# 48:  chr8-102655285-102656514 KLF10  KLF2       KLF2   NA          NA NA
+
+#network altered tfs asso
+library(ggnet)
+library(network)
+library(sna)
+
+net<-as.network(unique(regn_alt[(linked.tfs.alt)][,.(tf,gene)]),loops = T,directed = T)
+ggnet2(net,
+       size = "degree",
+       label = T,
+       arrow.size = 5,arrow.gap =0.02)
+
+
+#add nalt tf norm
+net %v% "nalt.tf.norm" = unique(regn_alt[tf%in%network.vertex.names(net)][,.(tf,gene,nalt.tf.norm)],by="tf")[network.vertex.names(net),on="tf"]$nalt.tf.norm
+nalt.tf.norm<-unique(regn_alt[tf%in%network.vertex.names(net)][,.(tf,gene,nalt.tf.norm)],by="tf")[network.vertex.names(net),on="tf"]$nalt.tf.norm
+ggnet2(net,
+       size = "nalt.tf.norm",
+       color = "nalt.tf.norm",color.legend ="nalt.tf.norm", 
+       label = T,
+       arrow.size = 5,arrow.gap =0.02)
+
+
+
+ ggnet2(net, 
+              size = 0,
+              #color = RImp,
+              label = F,
+        arrow.size = 5,arrow.gap =0.02) +
+  theme(legend.text = element_text(size = 10)) +
+  geom_point(aes(fill = nalt.tf.norm), size = nalt.tf.norm, col = "grey", shape = 21) +
+   geom_text(aes(label = network.vertex.names(net)),nudge_y=0.04 ) +
+  scale_fill_continuous(name = "norm. alterations",
+                        limits=c(0, 7), breaks=seq(0, 7, by= 7),
+                        low = "floralwhite" ,high = "firebrick1")
+ 
+ 
+ net2<-as.network(unique(regn_alt[(tf.alt)][,.(tf,gene)]),loops = T,directed = T)
+ggnet2(net2,
+       size = "degree",
+       label = T,
+       arrow.size = 5,arrow.gap =0.02)
+
+
+#add methylation infos on node, on edge 
+
+#same for chromatin change 
+
+#same for DEGs
+
+#bp assos
+
+#beginer (upstream alteration)
+#methylation
+
+#targets with at 
+
+#unstim + stim to increase power ?####
+
+DefaultAssay(cbls)<-"peaks"
+da_peaks <- FindMarkers(
+  object = cbls,
+  group.by = "group",
+  ident.1 = "LGA", 
+  ident.2 ="CTRL",
+  subset.ident = "HSC",
+  min.pct = 0.05,
+  test.use = 'LR',
+  latent.vars = c('atac_peak_region_fragments')
+)
+
+da_peaks<-data.table(da_peaks,keep.rownames = "peak")
+da_peaks[p_val_adj<0.05]
+da_peaks[p_val<0.001] #not better than stim alone
+
+#which genes ?
+da_peaks_genes<-merge(da_peaks,res_peak_genes,all.x=T)
+da_peaks_genes[p_val<0.05&!is.na(start)]
+
+
+#effect of LGA on DEGs
 

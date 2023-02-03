@@ -19,10 +19,15 @@ hmap_list<-list(ctrlF547=readRDS(fp(out,"ctrlF547.rds"),
 
 
 lapply(hmap_list, function(x)head(x@meta.data))
+
+?SCTransform
+
+#Normalisation 
 hmap_list<-lapply(hmap_list, SCTransform,
                   return.only.var.genes=F, 
                   method = "glmGamPoi")
 
+#Corriger pour le cycle cellulaire
 hmap_list<-lapply(hmap_list,function(x){
   x <- CellCycleScoring(x,s.features = cc.genes$s.genes,
                                  g2m.features = cc.genes$g2m.genes,
@@ -37,18 +42,38 @@ hmap_list<-lapply(hmap_list, SCTransform,vars.to.regress=c("percent.mt","CC.Diff
                   return.only.var.genes=F, 
                   method = "glmGamPoi")
 
+#Alternative : NormalizeData
+#?NormalizeData
+
+#Integration
+
+
+#find common expressed genes
 features <- SelectIntegrationFeatures(object.list = hmap_list, nfeatures = 3000)
 length(features)
+#check normalization in all datasets
 hmap_list <- PrepSCTIntegration(object.list = hmap_list, anchor.features = features)
+
+#
 hmap_list <- lapply(X = hmap_list, FUN = RunPCA, features = features)
+
+#find link between cell of different library/dataset
 hmap.anchors <- FindIntegrationAnchors(object.list = hmap_list, normalization.method = "SCT", 
     anchor.features = features, dims = 1:50, reduction = "rpca", k.anchor = 20)
+
+#integrate data
 hmap <- IntegrateData(anchorset = hmap.anchors, normalization.method = "SCT", dims = 1:50)
-hmap <- RunPCA(hmap, verbose = FALSE)
+
+hmap <- RunPCA(hmap,assay="integrated",verbose = FALSE)
 hmap <- RunUMAP(hmap, reduction = "pca", dims = 1:50)
+
+hmap<-readRDS("outputs/05-make_hematomap/hematomap_ctrls_sans_stress.rds")
+
 # Visualization
+DimPlot(hmap, reduction = "umap", group.by = "orig.ident")
+
 p1 <- DimPlot(hmap, reduction = "umap", group.by = "orig.ident")
-p2 <- DimPlot(hmap, reduction = "umap", group.by = "cell_type", label = TRUE, 
+p2 <- DimPlot(hmap, reduction = "umap", group.by = "batch", label = TRUE, 
     repel = TRUE)
 p1 + p2
 
@@ -69,10 +94,13 @@ saveRDS(hmap,fp(out,paste0(sample_name,".rds")))
 hmap<-readRDS(fp(out,paste0(sample_name,".rds")))
 
 #clustering
+DefaultAssay(hmap)<-"integrated"
 hmap <- FindNeighbors(object = hmap, dims = 1:50)
 
 hmap<- FindClusters(hmap,resolution = 0.6,
                                algorithm = 4) 
+DimPlot(hmap,group.by = "seurat_clusters")
+?FindClusters
 p1<-DimPlot(hmap,label = T)
 p2<-DimPlot(hmap,label = T,group.by = "sample")
 p3<-DimPlot(hmap,label = T,group.by = "orig.ident")
@@ -82,15 +110,27 @@ p_all
 ggsave(fp(out,"umap_SCT_percent.mt_CC.Difference_rpca_integrated_leiden_res0.6.png"),plot = p_all,width = 10,height = 10)
 
 DimPlot(hmap,label = T,group.by = "seurat_clusters")
-#markers identif 
+
+
+#markers identif ####
+hmap
 Idents(hmap)<-"seurat_clusters"
 DefaultAssay(hmap)<-"integrated"
+
+#
+markers<-FindMarkers(hmap,ident.1 = "1",ident.2 ="3" ) #pour identifier marqueurs du cluster 1
+?FindMarkers
+
 markers<-FindAllMarkers(hmap, min.pct = 0.3, only.pos = TRUE, logfc.threshold = 0.4)
 source("../singlecell/scripts/utils/seurat_utils.R")
 source("../singlecell/scripts/utils/scoreCluster.R")
+
+#home made function
 markers<-scoreMarquageCluster(markers,hmap,seuil = "intraClusterFixe",filtreMin = 2)
 markers<-annotMarkers(markers)
-fwrite()
+#home made function
+
+#fwrite()
 View(markers)
 feat1<-c("ID1","EGR1","IRF1","GATA2","GATA1","MPO","KLF2","LTB","VPREB1")
 FeaturePlot(hmap,feat1)
@@ -143,6 +183,7 @@ DimPlot(hmap,label = T)
 DimPlot(hmap,label = T,cells.highlight = WhichCells(hmap,idents = "HSC-4"))
 
 hmap[["cell_type"]]<-Idents(hmap)
+head(hmap@meta.data)
 Project(hmap)<-"hmap"
 hmap[[paste("cell_type",hmap@project.name,sep="_")]]<-hmap$cell_type
 head(hmap[[]])
@@ -203,6 +244,18 @@ hmap<-RunUMAP(hmap,dims=1:50,
                    )
 
 saveRDS(hmap,fp(out,paste0(sample_name,".rds")))
+
+m_lin<-fread("outputs/05-make_hematomap/markers_lineage_annotated.csv.gz")
+lapply(split(m_lin,by="cluster"),function(c)c[order(-score,-avg_log2FC)][1:10])
+lapply(split(m_lin,by="cluster"),function(dt)dt[order(-score,-avg_log2FC)][MarqueurPops!=""][1:10])
+
+
+
+m_lin<-fread("outputs/05-make_hematomap/markers_lineage_annotated.csv.gz")
+lapply(split(m_lin,by="cluster"),function(c)c[order(-score,-avg_log2FC)][1:10])
+lapply(split(m_lin,by="cluster"),function(dt)dt[order(-score,-avg_log2FC)][MarqueurPops!=""][1:10])
+
+
 
 #compute the first 50 neighbors in the PCA space of the reference.
 # store this information in the spca.annoy.neighbors object within the reference Seurat object

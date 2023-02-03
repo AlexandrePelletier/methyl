@@ -10,7 +10,7 @@ cbps<-readRDS("outputs/06-integr_singlecell_cbps/cbps_filtered.rds")
 cbps_h<-subset(cbps,hto==T)
 
 
-#Distribution change
+#Distribution change####
 cbps_h$lineage_hmap<-factor(cbps_h$lineage_hmap,levels = c("LT-HSC","HSC","MPP/LMPP","Lymphoid","B cell","T cell","Erythro-Mas","Mk/Er","Myeloid","DC"))
 
 
@@ -22,8 +22,8 @@ ggplot(unique(mtd,by=c("sample","lineage_hmap")))+
   geom_boxplot(aes(x=lineage_hmap,y=pct.lin,fill=group))
 
 
-#expr change in lineage
-#pseudobulk
+#expr change in lineage####
+#pseudobulk differential expression analyis
 Idents(cbps_h)<-"lineage_hmap"
 res_lin<-Reduce(rbind,lapply(levels(cbps_h),function(lin){
   print(lin)
@@ -31,6 +31,9 @@ res_lin<-Reduce(rbind,lapply(levels(cbps_h),function(lin){
   #get mtd of interest
   mtd<-data.table(cbps_sub@meta.data,keep.rownames = "bc")
   mts<-unique(mtd,by=c("sample"))
+  
+  
+  
   #get counts and filter genes lowly express
   counts<-as.matrix(cbps_sub@assays$RNA@counts)
   dim(counts) 
@@ -70,8 +73,24 @@ fwrite(res_lin,fp(out,"res_pseudobulkDESeq2_by_lineage.csv.gz"))
 res_lin<-fread(fp(out,"res_pseudobulkDESeq2_by_lineage.csv.gz"))
 
 genes_of_interest<-c("SOCS3","HES1","JUN","FOS","JUNB","ZFP36","EGR1",
-                      "DUSP2","DUSP1","FOSB","SOCS1","KLF2","KLF4",
-                       "PLK2","PLK3","ID1","MYC","","ID2","IDS","RGCC","PIK3R1","MT-ND3")
+                      "DUSP2","DUSP1","FOSB","SOCS1","KLF2","KLF4","SESN2",
+                       "PLK2","PLK3","ID1","MYC","","ID2","IDS","RGCC","PIK3R1","MT-ND3",'GADD45B')
+
+
+res_hsc<-res_lin[lineage=="HSC"]
+ggplot(res_hsc[lineage%in%c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","Lymphoid")],aes(x=log2FoldChange,y=-log10(padj),col=padj<0.05&abs(log2FoldChange)>0.5))+
+  geom_point()+ 
+  geom_label_repel(aes(label = ifelse(padj<0.05&
+                                        abs(log2FoldChange)>0.5&gene%in%genes_of_interest,gene,"")),
+                   max.overlaps = 5000,
+                   box.padding   = 0.35,
+                   point.padding = 0.5,
+                   segment.color = 'grey50')+
+  facet_wrap("lineage")+
+  scale_color_manual(values = c("grey","red")) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+
 
 ggplot(res_lin[lineage%in%c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","Lymphoid")],aes(x=log2FoldChange,y=-log10(padj),col=padj<0.11&abs(log2FoldChange)>0.6))+
   geom_point()+ 
@@ -86,7 +105,6 @@ ggplot(res_lin[lineage%in%c("LT-HSC","HSC","MPP/LMPP","Erythro-Mas","Myeloid","L
   theme_minimal() +
   theme(legend.position = "bottom")
 #ggsave("outputs/figures_epi_response/figure2/2D-pseudo_bulk_deseq2_by_lineage_lga_vs_ctrl_activated.pdf")
-
 #sc 
 #run 09A
 res_lin_act_sc<-fread("outputs/09-LGA_vs_Ctrl_Activated/res_scEdgeR_by_lineage.csv.gz")
